@@ -68,6 +68,17 @@ td.ad{white-space:normal}
 .rec .s{font-size:20px;font-weight:900;width:38px;text-align:center}
 .rec .nm{font-weight:700}
 .pin{background:#141414;color:#d7f24a;font-weight:900;font-size:12px;border-radius:12px;padding:2px 7px;border:2px solid #fff;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.pin.me{background:#d7f24a;color:#141414;border-color:#141414}
+.ce{padding:10px 0;border-top:1px solid var(--line)}
+.ch{display:flex;align-items:center;gap:8px;cursor:pointer}
+.ch b{flex:1;min-width:0}
+.ch .no{background:#d7f24a;border:2px solid #141414;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;flex:none}
+.ch .sc{font-weight:900;font-size:20px}
+.cf{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.cf label{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--mute)}
+.cf input{font:inherit;border:1px solid var(--line);border-radius:8px;padding:5px 8px;width:92px}
+.cf input[type=url]{flex:1;width:auto;min-width:0}
+.cf .pp{font-weight:700;font-size:14px}
 </style>
 </head>
 <body>
@@ -80,7 +91,7 @@ td.ad{white-space:normal}
       <div class="seg" id="range"><button data-r="300">300m</button><button data-r="500" class="on">500m</button><button data-r="800">800m</button></div>
     </div>
     <div style="position:relative"><div id="map"></div><div id="loading">載入中…</div></div>
-    <div class="legend"><span><i style="background:#2b59c3"></i>百貨商場</span><span><i style="background:#141414"></i>捷運／火車站</span><span><i style="background:#ff5fa2"></i>美甲店（台北市，放大地圖後顯示）</span></div>
+    <div class="legend"><span><i style="background:#2b59c3"></i>百貨商場</span><span><i style="background:#141414"></i>捷運／火車站</span><span><i style="background:#ff5fa2"></i>美甲店（台北市，放大地圖後顯示）</span><span><i style="background:#d7f24a;border:1px solid #141414"></i>你加入比較的地點</span></div>
   </div>
   <div class="side">
     <div class="card" id="res"><div class="sub">點地圖任一處開始</div></div>
@@ -95,7 +106,7 @@ td.ad{white-space:normal}
 <script>
 const COL={8:'#2b59c3',9:'#141414'};
 const S={r:500,sel:null,cmp:[]};
-let MRT=[],PICKS={n:0,list:[]},D,BIZ,DAY={},TOWN={},TPE={nail:[],other:[]},feats,bbox=[],map,dots,circle,center;
+let MRT=[],PICKS={n:0,list:[]},D,BIZ,DAY={},TOWN={},TPE={nail:[],other:[]},feats,bbox=[],map,dots,cmpLayer,circle,center;
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew]
 //CALC-START
@@ -146,7 +157,7 @@ async function init(){
   map=L.map('map').setView([25.0423,121.544],15);
   map.attributionControl.setPrefix('');
   L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}',{maxZoom:19,attribution:'底圖 © 內政部國土測繪中心'}).addTo(map);
-  dots=L.layerGroup().addTo(map);
+  dots=L.layerGroup().addTo(map);cmpLayer=L.layerGroup().addTo(map);
   map.on('moveend',drawDots);
   map.on('click',e=>pick(e.latlng));
   document.getElementById('loading').remove();
@@ -195,12 +206,12 @@ function render(){
     <div><b>美業</b><span>美甲 ${fmt(s.nail)} 家・美容美髮 ${fmt(s.other)} 家（100 分＝全台北最密集的地方）</span><em>${Math.round(s.heat)}</em></div>
    </div>
    <div class="sub">指數＝人流 40%＋客群 30%＋美業熱度 30%，右側是各項得分。白天人口是整個行政區的數字（2020 年電信信令）。台北市的美業店數照門牌位置實算，其他縣市照里估算。</div>
-   <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
+   <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a><a class="btn" target="_blank" rel="noopener" href="${rentUrl(a)}">出租店面（591）</a></div>
    <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td class="ad">${x[0]}${x[1]?`<div><a class="sub" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x[3]+x[1])}">${x[1]}</a></div>`:''}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
 }
 // 比較清單存在瀏覽器裡，重新整理或網頁更新後還在；分數每次載入重算
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function saveCmp(){try{localStorage.setItem('nailmap.cmp',JSON.stringify(S.cmp.map(x=>({name:x.name,lat:x.lat,lng:x.lng,r:x.r}))))}catch(e){}}
+function saveCmp(){try{localStorage.setItem('nailmap.cmp',JSON.stringify(S.cmp.map(x=>({name:x.name,lat:x.lat,lng:x.lng,r:x.r,rent:x.rent,ping:x.ping,url:x.url}))))}catch(e){}}
 // 分享連結：把清單寫進網址 #s=...，朋友打開就會併進他的比較清單
 const b64e=s=>btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0)));
@@ -215,15 +226,35 @@ function loadCmp(){let a=[];try{a=JSON.parse(localStorage.getItem('nailmap.cmp')
   if(!Array.isArray(a))a=[];
   const sh=sharedCmp().filter(x=>!a.some(y=>y.r===x.r&&Math.abs(y.lat-x.lat)<1e-4&&Math.abs(y.lng-x.lng)<1e-4));
   a=a.concat(sh).slice(-10);
-  S.cmp=[];for(const x of a){const s=calc(+x.lat,+x.lng,+x.r||500);if(s)S.cmp.push({name:String(x.name||''),lat:s.lat,lng:s.lng,r:+x.r||500,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat})}
+  S.cmp=[];for(const x of a){const s=calc(+x.lat,+x.lng,+x.r||500);if(s)S.cmp.push({name:String(x.name||''),lat:s.lat,lng:s.lng,r:+x.r||500,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat,rent:+x.rent>0?+x.rent:null,ping:+x.ping>0?+x.ping:null,url:okUrl(x.url)})}
   renderCmp();
   if(sh.length){saveCmp();const j=S.cmp.findIndex(x=>x.name===String(sh[0].name||''));if(j>=0)goCmp(j)}}
 function addCmp(){const s=S.sel;S.cmp.push({name:s.label||s.anc[1]+s.anc[2],lat:s.lat,lng:s.lng,r:S.r,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>10)S.cmp.shift();saveCmp();renderCmp()}
 function goCmp(j){const x=S.cmp[j];S.r=x.r;document.querySelectorAll('#range button').forEach(b=>b.classList.toggle('on',+b.dataset.r===x.r));go(L.latLng(x.lat,x.lng),x.name)}
+// 591 店面出租頁：台北市、新北市對到行政區，其他縣市改用搜尋
+const R591={'臺北市':[1,{'中正區':1,'大同區':2,'中山區':3,'松山區':4,'大安區':5,'萬華區':6,'信義區':7,'士林區':8,'北投區':9,'內湖區':10,'南港區':11,'文山區':12}],
+  '新北市':[3,{'板橋區':26,'汐止區':27,'深坑區':28,'石碇區':29,'瑞芳區':30,'平溪區':31,'雙溪區':32,'貢寮區':33,'新店區':34,'坪林區':35,'烏來區':36,'永和區':37,'中和區':38,'土城區':39,'三峽區':40,'樹林區':41,'鶯歌區':42,'三重區':43,'新莊區':44,'泰山區':45,'林口區':46,'蘆洲區':47,'五股區':48}]};
+function rentUrl(a){const c=R591[a[0]];if(!c)return 'https://www.google.com/search?q='+encodeURIComponent(a[0]+a[1]+' 店面出租');
+  const s=c[1][a[1]];return 'https://business.591.com.tw/list?type=1&region='+c[0]+(s?'&section='+s:'')+'&kind=5'}
+// 候選店面：月租、坪數、物件網址只存在這台裝置的瀏覽器，不會寫進分享連結
+const okUrl=u=>{u=String(u||'').trim();return /^https?:\/\//i.test(u)?u:''};
+const perPing=x=>x.rent&&x.ping?'每坪 '+fmt(x.rent/x.ping)+' 元':'';
+const lookLink=x=>x.url?`<a class="sub" target="_blank" rel="noopener" href="${esc(x.url)}">看物件</a>`:'';
+function setCmp(j,k,v){const x=S.cmp[j];if(!x)return;
+  if(k==='url')x.url=okUrl(v);else x[k]=+v>0?+v:null;
+  saveCmp();document.getElementById('pp'+j).textContent=perPing(x);document.getElementById('lk'+j).innerHTML=lookLink(x)}
 function renderCmp(){
   const c=document.getElementById('cmp');c.style.display=S.cmp.length?'':'none';
-  c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>人流</th><th>客群</th><th>美業</th><th></th></tr>
-   ${S.cmp.map((x,j)=>`<tr><td class="ad" style="cursor:pointer" onclick="goCmp(${j})">${esc(x.name)} <span class="sub">${x.r}m</span></td><td><b>${x.score}</b></td><td>${Math.round(x.flow)}</td><td>${Math.round(x.cust)}</td><td>${Math.round(x.heat)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);saveCmp();renderCmp()">✕</button></td></tr>`).join('')}</table><div class="btns"><button class="btn" id="shareBtn" onclick="shareCmp()">分享這份清單</button></div>`;
+  c.innerHTML=`<div style="font-weight:900;font-size:17px">比較清單</div>
+   <div class="sub" style="margin:4px 0 2px">看到中意的店面，可以填月租和坪數，會算出每坪租金。這些只存在這台裝置，不會跟著分享連結出去。</div>
+   ${S.cmp.map((x,j)=>`<div class="ce">
+    <div class="ch" onclick="goCmp(${j})"><span class="no">${j+1}</span><b>${esc(x.name)} <span class="sub">${x.r}m</span></b><span class="sc" style="color:${verdict(x.score)[1]}">${x.score}</span></div>
+    <div class="sub">人流 ${Math.round(x.flow)}・客群 ${Math.round(x.cust)}・美業 ${Math.round(x.heat)}</div>
+    <div class="cf"><label>月租<input type="number" inputmode="numeric" min="0" placeholder="元" value="${x.rent||''}" onchange="setCmp(${j},'rent',this.value)"></label><label>坪數<input type="number" inputmode="decimal" min="0" step="0.1" placeholder="坪" value="${x.ping||''}" onchange="setCmp(${j},'ping',this.value)"></label><span class="pp" id="pp${j}">${perPing(x)}</span></div>
+    <div class="cf"><input type="url" placeholder="貼上物件網址（選填）" value="${esc(x.url||'')}" onchange="setCmp(${j},'url',this.value)"><span id="lk${j}">${lookLink(x)}</span><button class="x" onclick="S.cmp.splice(${j},1);saveCmp();renderCmp()">✕</button></div>
+   </div>`).join('')}
+   <div class="btns"><button class="btn" id="shareBtn" onclick="shareCmp()">分享這份清單</button></div>`;
+  if(cmpLayer){cmpLayer.clearLayers();S.cmp.forEach((x,j)=>L.marker([x.lat,x.lng],{icon:L.divIcon({className:'',html:`<div class="pin me">${j+1}</div>`,iconSize:null,iconAnchor:[12,12]})}).on('click',()=>goCmp(j)).addTo(cmpLayer))}
 }
 document.getElementById('range').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.r=+b.dataset.r;
   document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));if(S.sel)pick(S.sel.ll,S.sel.label)};
