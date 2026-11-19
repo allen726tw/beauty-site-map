@@ -178,15 +178,29 @@ function render(){
 // 比較清單存在瀏覽器裡，重新整理或網頁更新後還在；分數每次載入重算
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function saveCmp(){try{localStorage.setItem('nailmap.cmp',JSON.stringify(S.cmp.map(x=>({name:x.name,lat:x.lat,lng:x.lng,r:x.r}))))}catch(e){}}
+// 分享連結：把清單寫進網址 #s=...，朋友打開就會併進他的比較清單
+const b64e=s=>btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0)));
+function sharedCmp(){const m=location.hash.match(/[#&]s=([\w-]+)/);if(!m)return[];
+  try{const a=JSON.parse(b64d(m[1]));history.replaceState(null,'',location.pathname+location.search);return a.map(x=>({name:x[0],lat:x[1],lng:x[2],r:x[3]}))}catch(e){return[]}}
+async function shareCmp(){
+  const url=location.origin+location.pathname+'#s='+b64e(JSON.stringify(S.cmp.map(x=>[x.name,+x.lat.toFixed(5),+x.lng.toFixed(5),x.r]))),btn=document.getElementById('shareBtn');
+  if(navigator.share){try{await navigator.share({title:'美業選址小幫手',url});return}catch(e){if(e&&e.name==='AbortError')return}}
+  try{await navigator.clipboard.writeText(url);btn.textContent='已複製連結，貼給朋友就可以'}catch(e){btn.outerHTML=`<input readonly style="width:100%;font:inherit;padding:8px" value="${url}" onfocus="this.select()">`}
+}
 function loadCmp(){let a=[];try{a=JSON.parse(localStorage.getItem('nailmap.cmp')||'[]')}catch(e){}
-  S.cmp=[];for(const x of Array.isArray(a)?a:[]){const s=calc(+x.lat,+x.lng,+x.r||500);if(s)S.cmp.push({name:String(x.name||''),lat:s.lat,lng:s.lng,r:+x.r||500,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat})}
-  renderCmp()}
-function addCmp(){const s=S.sel;S.cmp.push({name:s.label||s.anc[1]+s.anc[2],lat:s.lat,lng:s.lng,r:S.r,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>6)S.cmp.shift();saveCmp();renderCmp()}
+  if(!Array.isArray(a))a=[];
+  const sh=sharedCmp().filter(x=>!a.some(y=>y.r===x.r&&Math.abs(y.lat-x.lat)<1e-4&&Math.abs(y.lng-x.lng)<1e-4));
+  a=a.concat(sh).slice(-10);
+  S.cmp=[];for(const x of a){const s=calc(+x.lat,+x.lng,+x.r||500);if(s)S.cmp.push({name:String(x.name||''),lat:s.lat,lng:s.lng,r:+x.r||500,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat})}
+  renderCmp();
+  if(sh.length){saveCmp();const j=S.cmp.findIndex(x=>x.name===String(sh[0].name||''));if(j>=0)goCmp(j)}}
+function addCmp(){const s=S.sel;S.cmp.push({name:s.label||s.anc[1]+s.anc[2],lat:s.lat,lng:s.lng,r:S.r,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>10)S.cmp.shift();saveCmp();renderCmp()}
 function goCmp(j){const x=S.cmp[j];S.r=x.r;document.querySelectorAll('#range button').forEach(b=>b.classList.toggle('on',+b.dataset.r===x.r));go(L.latLng(x.lat,x.lng),x.name)}
 function renderCmp(){
   const c=document.getElementById('cmp');c.style.display=S.cmp.length?'':'none';
   c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>人流</th><th>客群</th><th>美業</th><th></th></tr>
-   ${S.cmp.map((x,j)=>`<tr><td class="ad" style="cursor:pointer" onclick="goCmp(${j})">${esc(x.name)} <span class="sub">${x.r}m</span></td><td><b>${x.score}</b></td><td>${Math.round(x.flow)}</td><td>${Math.round(x.cust)}</td><td>${Math.round(x.heat)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);saveCmp();renderCmp()">✕</button></td></tr>`).join('')}</table>`;
+   ${S.cmp.map((x,j)=>`<tr><td class="ad" style="cursor:pointer" onclick="goCmp(${j})">${esc(x.name)} <span class="sub">${x.r}m</span></td><td><b>${x.score}</b></td><td>${Math.round(x.flow)}</td><td>${Math.round(x.cust)}</td><td>${Math.round(x.heat)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);saveCmp();renderCmp()">✕</button></td></tr>`).join('')}</table><div class="btns"><button class="btn" id="shareBtn" onclick="shareCmp()">分享這份清單</button></div>`;
 }
 document.getElementById('range').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.r=+b.dataset.r;
   document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));if(S.sel)pick(S.sel.ll,S.sel.label)};
