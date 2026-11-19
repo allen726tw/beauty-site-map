@@ -130,7 +130,7 @@ async function init(){
   map.on('moveend',drawDots);
   map.on('click',e=>pick(e.latlng));
   document.getElementById('loading').remove();
-  drawDots();renderRec();pick(L.latLng(25.0423,121.544));
+  drawDots();renderRec();pick(L.latLng(25.0423,121.544));loadCmp();
 }
 function renderRec(){
   const ps=PICKS.list;
@@ -147,9 +147,9 @@ function drawDots(){
     L.circleMarker([s[1],s[2]],{radius:5,color:'#fff',weight:1,fillColor:COL[s[0]],fillOpacity:.95,interactive:false}).addTo(dots)}
 }
 
-function pick(ll){
+function pick(ll,label){
   const s=calc(ll.lat,ll.lng,S.r);if(!s)return;
-  s.ll=ll;S.sel=s;
+  s.ll=ll;s.label=label||'';S.sel=s;
   if(circle)circle.remove();if(center)center.remove();
   circle=L.circle(ll,{radius:S.r,color:'#141414',weight:2.5,fillOpacity:.05,interactive:false}).addTo(map);
   center=L.circleMarker(ll,{radius:7,color:'#141414',weight:3,fillColor:'#d7f24a',fillOpacity:1,interactive:false}).addTo(map);
@@ -175,17 +175,24 @@ function render(){
    <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
    <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td class="ad">${x[0]}${x[1]?`<div><a class="sub" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x[3]+x[1])}">${x[1]}</a></div>`:''}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
 }
-function addCmp(){const s=S.sel;S.cmp.push({name:s.anc[1]+s.anc[2],score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>6)S.cmp.shift();renderCmp()}
+// 比較清單存在瀏覽器裡，重新整理或網頁更新後還在；分數每次載入重算
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function saveCmp(){try{localStorage.setItem('nailmap.cmp',JSON.stringify(S.cmp.map(x=>({name:x.name,lat:x.lat,lng:x.lng,r:x.r}))))}catch(e){}}
+function loadCmp(){let a=[];try{a=JSON.parse(localStorage.getItem('nailmap.cmp')||'[]')}catch(e){}
+  S.cmp=[];for(const x of Array.isArray(a)?a:[]){const s=calc(+x.lat,+x.lng,+x.r||500);if(s)S.cmp.push({name:String(x.name||''),lat:s.lat,lng:s.lng,r:+x.r||500,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat})}
+  renderCmp()}
+function addCmp(){const s=S.sel;S.cmp.push({name:s.label||s.anc[1]+s.anc[2],lat:s.lat,lng:s.lng,r:S.r,score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>6)S.cmp.shift();saveCmp();renderCmp()}
+function goCmp(j){const x=S.cmp[j];S.r=x.r;document.querySelectorAll('#range button').forEach(b=>b.classList.toggle('on',+b.dataset.r===x.r));go(L.latLng(x.lat,x.lng),x.name)}
 function renderCmp(){
   const c=document.getElementById('cmp');c.style.display=S.cmp.length?'':'none';
   c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>人流</th><th>客群</th><th>美業</th><th></th></tr>
-   ${S.cmp.map((x,j)=>`<tr><td>${x.name}</td><td><b>${x.score}</b></td><td>${Math.round(x.flow)}</td><td>${Math.round(x.cust)}</td><td>${Math.round(x.heat)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);renderCmp()">✕</button></td></tr>`).join('')}</table>`;
+   ${S.cmp.map((x,j)=>`<tr><td class="ad" style="cursor:pointer" onclick="goCmp(${j})">${esc(x.name)} <span class="sub">${x.r}m</span></td><td><b>${x.score}</b></td><td>${Math.round(x.flow)}</td><td>${Math.round(x.cust)}</td><td>${Math.round(x.heat)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);saveCmp();renderCmp()">✕</button></td></tr>`).join('')}</table>`;
 }
 document.getElementById('range').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.r=+b.dataset.r;
-  document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));if(S.sel)pick(S.sel.ll)};
+  document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));if(S.sel)pick(S.sel.ll,S.sel.label)};
 
 const q=document.getElementById('q'),sres=document.getElementById('sres');
-function go(ll){map.flyTo(ll,15);pick(ll)}
+function go(ll,label){map.flyTo(ll,15);pick(ll,label)}
 q.oninput=()=>{const t=q.value.trim().replace(/台/g,'臺');if(!t){sres.style.display='none';return}
   const out=[];D.props.forEach((p,i)=>{if(out.length<8&&(p[0]+p[1]+p[2]).includes(t)||out.length<8&&(p[1]+p[2]).includes(t))out.push(i)});
   sres.innerHTML=out.map(i=>`<div data-i="${i}">${P(i)[2]} <span class="sub">${P(i)[0]}${P(i)[1]}</span></div>`).join('')+`<div data-addr="1">🔍 搜尋地址「${q.value.trim()}」（或按 Enter）</div>`;
@@ -224,7 +231,7 @@ async function findAddr(raw){if(!raw)return;
     if(!hit){try{hit=await nominatim(c)}catch(e){}}
     if(hit){const exact=c===t&&hit.type==='PointAddress';
       hint.innerHTML=`📍 ${hit.label.replace(/,\s*\d+$/,'')}　<span class="sub">${exact?'精確門牌':'約略位置（'+(TYPE[hit.type]||'附近')+'）'}</span>`;
-      q.value='';go(L.latLng(hit.lat,hit.lng));return}}
+      q.value='';go(L.latLng(hit.lat,hit.lng),hit.label.replace(/,\s*\d+$/,'').replace(/^.{2}[縣市]/,''));return}}
   hint.innerHTML='找不到這個地址，試試加上區名，例如「大安區延吉街」';
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.search'))sres.style.display='none'});
