@@ -65,7 +65,7 @@ td.ad{white-space:normal}
       <div class="seg" id="range"><button data-r="300">300m</button><button data-r="500" class="on">500m</button><button data-r="800">800m</button></div>
     </div>
     <div style="position:relative"><div id="map"></div><div id="loading">載入中…</div></div>
-    <div class="legend"><span><i style="background:#2b59c3"></i>百貨商場</span><span><i style="background:#141414"></i>捷運／火車站</span></div>
+    <div class="legend"><span><i style="background:#2b59c3"></i>百貨商場</span><span><i style="background:#141414"></i>捷運／火車站</span><span><i style="background:#ff5fa2"></i>美甲店（台北市，放大地圖後顯示）</span></div>
   </div>
   <div class="side">
     <div class="card" id="res"><div class="sub">點地圖任一處開始</div></div>
@@ -80,11 +80,11 @@ td.ad{white-space:normal}
 <script>
 const COL={8:'#2b59c3',9:'#141414'};
 const S={r:500,sel:null,cmp:[]};
-let MRT=[],PICKS={n:0,list:[]},D,BIZ,DAY={},TOWN={},feats,bbox=[],map,dots,circle,center;
+let MRT=[],PICKS={n:0,list:[]},D,BIZ,DAY={},TOWN={},TPE={nail:[],other:[]},feats,bbox=[],map,dots,circle,center;
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew]
 //CALC-START
-const HEAT=[1,110,3,400]; // 每平方公里店數：美甲低標/高標、美容美髮低標/高標；高標取全台北最密的地方，只有那裡才會滿分
+const HEAT=[1,125,3,430]; // 每平方公里店數：美甲低標/高標、美容美髮低標/高標；高標取全台北最密的地方，只有那裡才會滿分
 const RAD=Math.PI/180;
 const dist=(a,b,c,d)=>{const x=Math.sin((c-a)*RAD/2),y=Math.sin((d-b)*RAD/2);return 12742000*Math.asin(Math.sqrt(x*x+Math.cos(a*RAD)*Math.cos(c*RAD)*y*y))};
 const lg=(v,lo,hi)=>Math.max(0,Math.min(100,(Math.log10(Math.max(v,1e-9))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100));
@@ -98,7 +98,12 @@ function calc(lat,lng,r){
   if(!parts.length)return null;
   parts.sort((x,y)=>y.a-x.a);
   let f=0,nail=0,other=0,w=0,sp=0,vs=0;
-  for(const {i,frac,a} of parts){const p=P(i);f+=p[8]*frac;nail+=p[14]*frac;other+=(p[15]+p[16])*frac;w+=a;sp+=(p[11]+p[13])/2*a;vs+=(p[10]+p[12])/2*a}
+  for(const {i,frac,a} of parts){const p=P(i);f+=p[8]*frac;if(p[0]!=='臺北市'){nail+=p[14]*frac;other+=(p[15]+p[16])*frac}w+=a;sp+=(p[11]+p[13])/2*a;vs+=(p[10]+p[12])/2*a}
+  // 臺北市的店用實際門牌坐標數（tpe.json），其他縣市才用里的面積比例估
+  const np=[],dl=r/111000;
+  for(let j=0;j<TPE.nail.length;j++){const q=TPE.nail[j];if(Math.abs(q[0]-lat)<=dl&&dist(lat,lng,q[0],q[1])<=r)np.push(j)}
+  nail+=np.length;
+  for(const q of TPE.other)if(Math.abs(q[0]-lat)<=dl&&dist(lat,lng,q[0],q[1])<=r)other++;
   let mall=0;for(const s of D.stores)if(s[0]===8&&dist(lat,lng,s[1],s[2])<=r)mall++;
   const km2=turf.area(c)/1e6,spend=sp/w,visit=vs/w,anc=P(parts[0].i);
   // 捷運人流：1 公里內各站每日進出人次（11–21 點），300 公尺內全算、到 1 公里遞減到 0
@@ -114,13 +119,13 @@ function calc(lat,lng,r){
   // 美業熱度：美甲、美容、美髮店越多，代表這一帶越有保養消費習慣（加分，不當競爭）
   const heat=0.6*lg(nail/km2,HEAT[0],HEAT[1])+0.4*lg(other/km2,HEAT[2],HEAT[3]);
   const score=Math.round(flow*.4+cust*.3+heat*.3);
-  return {lat,lng,parts,f,nail,other,spend,visit,mall,score,mflow,hasMrt,top,flow,cust,heat,dp,anc};
+  return {lat,lng,parts,f,nail,other,np,spend,visit,mall,score,mflow,hasMrt,top,flow,cust,heat,dp,anc};
 }
 //CALC-END
 
 async function init(){
-  const [topo,data,biz,picks,mrt,day]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json','mrt.json','day.json'].map(u=>fetch(u).then(r=>r.json())));
-  D=data;BIZ=biz;PICKS=picks;MRT=Object.entries(mrt);DAY=day;townArea();
+  const [topo,data,biz,picks,mrt,day,tpe]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json','mrt.json','day.json','tpe.json'].map(u=>fetch(u).then(r=>r.json())));
+  D=data;BIZ=biz;PICKS=picks;MRT=Object.entries(mrt);DAY=day;TPE=tpe;townArea();
   feats=topojson.feature(topo,topo.objects.villages).features;
   feats.forEach((f,i)=>bbox[i]=turf.bbox(f));
   map=L.map('map').setView([25.0423,121.544],15);
@@ -145,6 +150,8 @@ function drawDots(){
   const b=map.getBounds().pad(.1);
   for(const s of D.stores){if(s[0]<8||!b.contains([s[1],s[2]]))continue;
     L.circleMarker([s[1],s[2]],{radius:5,color:'#fff',weight:1,fillColor:COL[s[0]],fillOpacity:.95,interactive:false}).addTo(dots)}
+  if(map.getZoom()>=15)for(const q of TPE.nail){if(!b.contains([q[0],q[1]]))continue;
+    L.circleMarker([q[0],q[1]],{radius:4,color:'#fff',weight:1,fillColor:'#ff5fa2',fillOpacity:.95}).bindTooltip(esc(q[2])).addTo(dots)}
 }
 
 function pick(ll,label){
@@ -160,7 +167,8 @@ function verdict(s){
 }
 function render(){
   const s=S.sel,v=verdict(s.score),a=s.anc;
-  const shops=[];for(const p of s.parts.filter(p=>p.frac>=.15))for(const x of (BIZ[p.i]||[]))if(x[0]===0)shops.push([x[1],x[3]||'',x[2],P(p.i)[0]+P(p.i)[1]]);
+  const shops=s.np.map(j=>{const q=TPE.nail[j];return [q[2],q[3].slice(3),q[4],'臺北市'+q[3].slice(0,3)]});
+  for(const p of s.parts.filter(p=>p.frac>=.15&&P(p.i)[0]!=='臺北市'))for(const x of (BIZ[p.i]||[]))if(x[0]===0)shops.push([x[1],x[3]||'',x[2],P(p.i)[0]+P(p.i)[1]]);
   shops.sort((x,y)=>y[2]-x[2]);
   const ym=d=>d?`${Math.floor(d/10000)}/${String(Math.floor(d/100)%100).padStart(2,'0')}`:'';
   const g=`${s.ll.lat.toFixed(6)},${s.ll.lng.toFixed(6)}`;
@@ -171,7 +179,7 @@ function render(){
     <div><b>客群</b><span>女性 20–44 歲 ${fmt(s.f)} 人・消費熱度 ${Math.round(s.spend)} 分${s.dp?`・${a[1]}白天平日 ${(s.dp[0]/1e4).toFixed(1)} 萬／假日 ${(s.dp[1]/1e4).toFixed(1)} 萬人`:''}</span><em>${Math.round(s.cust)}</em></div>
     <div><b>美業</b><span>美甲 ${fmt(s.nail)} 家・美容美髮 ${fmt(s.other)} 家（100 分＝全台北最密集的地方）</span><em>${Math.round(s.heat)}</em></div>
    </div>
-   <div class="sub">指數＝人流 40%＋客群 30%＋美業熱度 30%，右側是各項得分。白天人口是整個行政區的數字（2020 年電信信令）。</div>
+   <div class="sub">指數＝人流 40%＋客群 30%＋美業熱度 30%，右側是各項得分。白天人口是整個行政區的數字（2020 年電信信令）。台北市的美業店數照門牌位置實算，其他縣市照里估算。</div>
    <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
    <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td class="ad">${x[0]}${x[1]?`<div><a class="sub" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x[3]+x[1])}">${x[1]}</a></div>`:''}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
 }
