@@ -84,7 +84,7 @@ let MRT=[],PICKS={n:0,list:[]},D,BIZ,DAY={},TOWN={},feats,bbox=[],map,dots,circl
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew]
 //CALC-START
-const HEAT=[1,40,3,120]; // 每平方公里店數：美甲低標/高標、美容美髮低標/高標
+const HEAT=[1,110,3,400]; // 每平方公里店數：美甲低標/高標、美容美髮低標/高標；高標取全台北最密的地方，只有那裡才會滿分
 const RAD=Math.PI/180;
 const dist=(a,b,c,d)=>{const x=Math.sin((c-a)*RAD/2),y=Math.sin((d-b)*RAD/2);return 12742000*Math.asin(Math.sqrt(x*x+Math.cos(a*RAD)*Math.cos(c*RAD)*y*y))};
 const lg=(v,lo,hi)=>Math.max(0,Math.min(100,(Math.log10(Math.max(v,1e-9))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100));
@@ -169,7 +169,7 @@ function render(){
    <div class="lines">
     <div><b>人流</b><span>${s.hasMrt?`附近捷運每天約 ${(s.mflow/1e4).toFixed(1)} 萬人次${s.top?`（${s.top[0].replace(/^[A-Z]/,'')}站）`:''}・`:''}來客熱度 ${Math.round(s.visit)} 分・百貨商場 ${s.mall} 家</span><em>${Math.round(s.flow)}</em></div>
     <div><b>客群</b><span>女性 20–44 歲 ${fmt(s.f)} 人・消費熱度 ${Math.round(s.spend)} 分${s.dp?`・${a[1]}白天平日 ${(s.dp[0]/1e4).toFixed(1)} 萬／假日 ${(s.dp[1]/1e4).toFixed(1)} 萬人`:''}</span><em>${Math.round(s.cust)}</em></div>
-    <div><b>美業</b><span>美甲 ${fmt(s.nail)} 家・美容美髮 ${fmt(s.other)} 家（越多代表保養習慣越強）</span><em>${Math.round(s.heat)}</em></div>
+    <div><b>美業</b><span>美甲 ${fmt(s.nail)} 家・美容美髮 ${fmt(s.other)} 家（100 分＝全台北最密集的地方）</span><em>${Math.round(s.heat)}</em></div>
    </div>
    <div class="sub">指數＝人流 40%＋客群 30%＋美業熱度 30%，右側是各項得分。白天人口是整個行政區的數字（2020 年電信信令）。</div>
    <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
