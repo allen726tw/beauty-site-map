@@ -77,13 +77,13 @@ th:first-child,td:first-child{text-align:left}
 <script>
 const COL={5:'#00a3ad',6:'#e5007f',7:'#8e44ad',8:'#2b59c3',9:'#141414'};
 const S={r:500,sel:null,cmp:[]};
-let PICKS=[],D,BIZ,feats,bbox=[],map,dots,circle,center;
+let MRT=[],PICKS=[],D,BIZ,feats,bbox=[],map,dots,circle,center;
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew]
 
 async function init(){
-  const [topo,data,biz,picks]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json'].map(u=>fetch(u).then(r=>r.json())));
-  D=data;BIZ=biz;PICKS=picks;
+  const [topo,data,biz,picks,mrt]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json','mrt.json'].map(u=>fetch(u).then(r=>r.json())));
+  D=data;BIZ=biz;PICKS=picks;MRT=Object.entries(mrt);
   feats=topojson.feature(topo,topo.objects.villages).features;
   feats.forEach((f,i)=>bbox[i]=turf.bbox(f));
   map=L.map('map').setView([25.0423,121.544],15);
@@ -98,8 +98,8 @@ async function init(){
 function renderRec(){
   PICKS.forEach((p,i)=>L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:`<div class="pin">★ ${p.score}</div>`,iconSize:null,iconAnchor:[22,12]})}).on('click',()=>go(L.latLng(p.lat,p.lng))).addTo(map));
   document.getElementById('rec').innerHTML=`<div style="font-weight:900;font-size:17px">台北推薦地點</div>
-   <div class="sub" style="margin:4px 0 6px">全台北掃描 6,752 個點（500m 圈），只有 1 區達 90 分，以下列出 80 分以上的 10 區。點一下就跳過去。</div>
-   ${PICKS.map((p,i)=>`<div class="rec" onclick="go(L.latLng(${p.lat},${p.lng}))"><div class="s" style="color:${p.score>=90?'#1f8a4c':'#5d8a14'}">${p.score}</div><div><div class="nm">${p.name}附近 <span class="sub">${p.town}${p.vill}</span></div><div class="sub">${p.why}</div></div></div>`).join('')}
+   <div class="sub" style="margin:4px 0 6px">全台北掃描 6,752 個點（500m 圈），已納入捷運實際進出人次。最高 89 分，以下是分數最高的 10 區，點一下就跳過去。</div>
+   ${PICKS.map((p,i)=>`<div class="rec" onclick="go(L.latLng(${p.lat},${p.lng}))"><div class="s" style="color:${p.score>=85?'#1f8a4c':'#5d8a14'}">${p.score}</div><div><div class="nm">${p.name}附近 <span class="sub">${p.town}${p.vill}</span></div><div class="sub">${p.why}</div></div></div>`).join('')}
    <div class="sub" style="margin-top:8px">每 200 公尺取一個點計算，相鄰 800 公尺內只留分數最高的一點。分數是相對比較，實際仍要看租金、店面與人潮。</div>`;
 }
 function drawDots(){
@@ -116,18 +116,22 @@ function pick(ll){
     if(!x)continue;const a=turf.area(x);if(a<1)continue;parts.push({i,frac:Math.min(1,a/turf.area(feats[i])),a})}
   if(!parts.length)return;
   parts.sort((x,y)=>y.a-x.a);
-  let f=0,nail=0,w=0,rt=0;
-  for(const {i,frac,a} of parts){const p=P(i);f+=p[8]*frac;nail+=p[14]*frac;w+=a;rt+=(p[12]+p[13])/2*a}
+  let f=0,nail=0,w=0,sp=0,vs=0;
+  for(const {i,frac,a} of parts){const p=P(i);f+=p[8]*frac;nail+=p[14]*frac;w+=a;sp+=(p[11]+p[13])/2*a;vs+=(p[10]+p[12])/2*a}
   const st={5:0,6:0,7:0,8:0,9:0};
   for(const s of D.stores) if(s[0]>=5&&ll.distanceTo([s[1],s[2]])<=S.r) st[s[0]]++;
-  const area=turf.area(c),retail=rt/w,drug=st[5]+st[6]+st[7];
-  // 指數
+  const area=turf.area(c),spend=sp/w,visit=vs/w,drug=st[5]+st[6]+st[7];
   const lg=(v,lo,hi)=>Math.max(0,Math.min(100,(Math.log10(Math.max(v,1e-9))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100));
+  // 捷運人流：1 公里內各站每日進出人次（11–21 點），300 公尺內全算、到 1 公里遞減到 0
+  let mflow=0,nearMrt=1e9,top=null;
+  for(const [n,[la,ln,day]] of MRT){const d=ll.distanceTo([la,ln]);nearMrt=Math.min(nearMrt,d);const wt=Math.max(0,Math.min(1,(1000-d)/700));if(wt>0){mflow+=day*wt;if(!top||day*wt>top[1])top=[n,day*wt,day]}}
+  const hasMrt=nearMrt<3000;
+  const crowd=hasMrt?0.6*lg(mflow,5000,150000)+0.4*visit:visit;
   const cust=lg(f/(area/1e6),300,8000);
-  const flow=Math.min(100,(drug*12+st[8]*20+st[9]*20)*Math.pow(500/S.r,2));
-  const comp=f<200?20:lg(nail>=.5?f/nail:3000,120,1500);
-  const score=Math.round(cust*.3+retail*.25+flow*.25+comp*.2);
-  S.sel={ll,parts,f,nail,retail,st,drug,score,anc:P(parts[0].i)};
+  const anchor=Math.min(100,(drug*15+st[8]*20)*Math.pow(500/S.r,2));
+  const comp=lg(nail>=.5?(f+mflow*0.05)/nail:5000,100,1500);
+  const score=Math.round(crowd*.35+cust*.2+spend*.2+anchor*.15+comp*.1);
+  S.sel={ll,parts,f,nail,spend,visit,st,drug,score,mflow,hasMrt,top,crowd,anc:P(parts[0].i)};
   if(circle)circle.remove();if(center)center.remove();
   circle=L.circle(ll,{radius:S.r,color:'#141414',weight:2.5,fillOpacity:.05,interactive:false}).addTo(map);
   center=L.circleMarker(ll,{radius:7,color:'#141414',weight:3,fillColor:'#d7f24a',fillOpacity:1,interactive:false}).addTo(map);
@@ -145,19 +149,20 @@ function render(){
   document.getElementById('res').innerHTML=`
    <div class="score"><div class="n" style="color:${v[1]}">${s.score}</div><div><div class="v" style="color:${v[1]}">${v[0]}</div><div class="sub">${a[1]}${a[2]}・走路 ${Math.round(S.r/72)} 分鐘內</div></div></div>
    <div class="lines">
+    <div><b>人潮</b><span>${s.hasMrt?`附近捷運每天約 ${(s.mflow/1e4).toFixed(1)} 萬人次${s.top?`（${s.top[0]}站）`:''}・`:''}來客熱度 ${Math.round(s.visit)} 分</span></div>
     <div><b>客群</b><span>女性 20–44 歲 ${fmt(s.f)} 人</span></div>
-    <div><b>消費</b><span>零售熱度 ${Math.round(s.retail)} 分</span></div>
-    <div><b>人流</b><span>百貨 ${s.st[8]}・車站 ${s.st[9]}・藥妝 ${s.drug}</span></div>
+    <div><b>消費</b><span>消費額熱度 ${Math.round(s.spend)} 分</span></div>
+    <div><b>錨點</b><span>藥妝 ${s.drug}・百貨商場 ${s.st[8]}</span></div>
     <div><b>同業</b><span>美甲店 ${fmt(s.nail)} 家</span></div>
    </div>
    <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
    <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td>${x[0]}</td><td class="sub">${x[1]}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
 }
-function addCmp(){const s=S.sel;S.cmp.push({name:s.anc[1]+s.anc[2],score:s.score,f:s.f,retail:s.retail,nail:s.nail});if(S.cmp.length>6)S.cmp.shift();renderCmp()}
+function addCmp(){const s=S.sel;S.cmp.push({name:s.anc[1]+s.anc[2],score:s.score,crowd:s.crowd,f:s.f,nail:s.nail});if(S.cmp.length>6)S.cmp.shift();renderCmp()}
 function renderCmp(){
   const c=document.getElementById('cmp');c.style.display=S.cmp.length?'':'none';
-  c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>女性</th><th>零售</th><th>美甲店</th><th></th></tr>
-   ${S.cmp.map((x,j)=>`<tr><td>${x.name}</td><td><b>${x.score}</b></td><td>${fmt(x.f)}</td><td>${Math.round(x.retail)}</td><td>${fmt(x.nail)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);renderCmp()">✕</button></td></tr>`).join('')}</table>`;
+  c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>人潮</th><th>女性</th><th>美甲店</th><th></th></tr>
+   ${S.cmp.map((x,j)=>`<tr><td>${x.name}</td><td><b>${x.score}</b></td><td>${Math.round(x.crowd)}</td><td>${fmt(x.f)}</td><td>${fmt(x.nail)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);renderCmp()">✕</button></td></tr>`).join('')}</table>`;
 }
 document.getElementById('range').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.r=+b.dataset.r;
   document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));if(S.sel)pick(S.sel.ll)};
