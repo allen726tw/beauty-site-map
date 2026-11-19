@@ -34,6 +34,8 @@ header{background:#141414;color:#fff;padding:12px 18px;font-size:18px;font-weigh
 .lines{margin:14px 0 4px}
 .lines div{display:flex;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
 .lines b{width:42px;flex:none}
+.lines span{flex:1}
+.lines em{font-style:normal;font-weight:900;flex:none}
 .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;color:inherit}
 .btn.dark{background:#141414;color:#fff;border-color:#141414}
@@ -62,7 +64,7 @@ th:first-child,td:first-child{text-align:left}
       <div class="seg" id="range"><button data-r="300">300m</button><button data-r="500" class="on">500m</button><button data-r="800">800m</button></div>
     </div>
     <div style="position:relative"><div id="map"></div><div id="loading">載入中…</div></div>
-    <div class="legend"><span><i style="background:#00a3ad"></i>屈臣氏</span><span><i style="background:#e5007f"></i>康是美</span><span><i style="background:#8e44ad"></i>寶雅</span><span><i style="background:#2b59c3"></i>百貨商場</span><span><i style="background:#141414"></i>捷運／火車站</span></div>
+    <div class="legend"><span><i style="background:#2b59c3"></i>百貨商場</span><span><i style="background:#141414"></i>捷運／火車站</span></div>
   </div>
   <div class="side">
     <div class="card" id="res"><div class="sub">點地圖任一處開始</div></div>
@@ -75,15 +77,49 @@ th:first-child,td:first-child{text-align:left}
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
 <script>
-const COL={5:'#00a3ad',6:'#e5007f',7:'#8e44ad',8:'#2b59c3',9:'#141414'};
+const COL={8:'#2b59c3',9:'#141414'};
 const S={r:500,sel:null,cmp:[]};
-let MRT=[],PICKS=[],D,BIZ,feats,bbox=[],map,dots,circle,center;
+let MRT=[],PICKS={n:0,list:[]},D,BIZ,DAY={},TOWN={},feats,bbox=[],map,dots,circle,center;
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew]
+//CALC-START
+const HEAT=[1,40,3,120]; // 每平方公里店數：美甲低標/高標、美容美髮低標/高標
+const RAD=Math.PI/180;
+const dist=(a,b,c,d)=>{const x=Math.sin((c-a)*RAD/2),y=Math.sin((d-b)*RAD/2);return 12742000*Math.asin(Math.sqrt(x*x+Math.cos(a*RAD)*Math.cos(c*RAD)*y*y))};
+const lg=(v,lo,hi)=>Math.max(0,Math.min(100,(Math.log10(Math.max(v,1e-9))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100));
+function townArea(){TOWN={};for(const p of D.props){const k=p[0]+p[1];TOWN[k]=(TOWN[k]||0)+p[3]}}
+// 開店指數 = 人流 40% + 客群 30% + 美業熱度 30%
+function calc(lat,lng,r){
+  const c=turf.circle([lng,lat],r/1000,{steps:96,units:'kilometers'}),cb=turf.bbox(c),parts=[];
+  for(let i=0;i<feats.length;i++){const b=bbox[i];if(b[2]<cb[0]||b[0]>cb[2]||b[3]<cb[1]||b[1]>cb[3])continue;
+    let x=null;try{x=turf.intersect(turf.featureCollection([c,feats[i]]))}catch(e){}
+    if(!x)continue;const a=turf.area(x);if(a<1)continue;parts.push({i,frac:Math.min(1,a/turf.area(feats[i])),a})}
+  if(!parts.length)return null;
+  parts.sort((x,y)=>y.a-x.a);
+  let f=0,nail=0,other=0,w=0,sp=0,vs=0;
+  for(const {i,frac,a} of parts){const p=P(i);f+=p[8]*frac;nail+=p[14]*frac;other+=(p[15]+p[16])*frac;w+=a;sp+=(p[11]+p[13])/2*a;vs+=(p[10]+p[12])/2*a}
+  let mall=0;for(const s of D.stores)if(s[0]===8&&dist(lat,lng,s[1],s[2])<=r)mall++;
+  const km2=turf.area(c)/1e6,spend=sp/w,visit=vs/w,anc=P(parts[0].i);
+  // 捷運人流：1 公里內各站每日進出人次（11–21 點），300 公尺內全算、到 1 公里遞減到 0
+  let mflow=0,nearMrt=1e9,top=null;
+  for(const [n,[la,ln,day]] of MRT){const d=dist(lat,lng,la,ln);nearMrt=Math.min(nearMrt,d);const wt=Math.max(0,Math.min(1,(1000-d)/700));if(wt>0){mflow+=day*wt;if(!top||day*wt>top[1])top=[n,day*wt,day]}}
+  const hasMrt=nearMrt<3000;
+  // 人流：捷運進出人次＋來客熱度，再看步行圈內有沒有百貨商場這類停留型場所
+  const walk=hasMrt?0.6*lg(mflow,5000,150000)+0.4*visit:visit;
+  const flow=0.8*walk+0.2*Math.min(100,mall*25*Math.pow(500/r,2));
+  // 客群：20–44 歲女性密度＋消費熱度＋所在行政區白天活動人口密度
+  const dp=DAY[anc[0]+anc[1]],dayDens=dp?(dp[0]+dp[1])/2/(TOWN[anc[0]+anc[1]]/1e6):0;
+  const cust=0.5*lg(f/km2,300,8000)+0.3*spend+0.2*lg(dayDens,1000,40000);
+  // 美業熱度：美甲、美容、美髮店越多，代表這一帶越有保養消費習慣（加分，不當競爭）
+  const heat=0.6*lg(nail/km2,HEAT[0],HEAT[1])+0.4*lg(other/km2,HEAT[2],HEAT[3]);
+  const score=Math.round(flow*.4+cust*.3+heat*.3);
+  return {lat,lng,parts,f,nail,other,spend,visit,mall,score,mflow,hasMrt,top,flow,cust,heat,dp,anc};
+}
+//CALC-END
 
 async function init(){
-  const [topo,data,biz,picks,mrt]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json','mrt.json'].map(u=>fetch(u).then(r=>r.json())));
-  D=data;BIZ=biz;PICKS=picks;MRT=Object.entries(mrt);
+  const [topo,data,biz,picks,mrt,day]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json','mrt.json','day.json'].map(u=>fetch(u).then(r=>r.json())));
+  D=data;BIZ=biz;PICKS=picks;MRT=Object.entries(mrt);DAY=day;townArea();
   feats=topojson.feature(topo,topo.objects.villages).features;
   feats.forEach((f,i)=>bbox[i]=turf.bbox(f));
   map=L.map('map').setView([25.0423,121.544],15);
@@ -96,42 +132,23 @@ async function init(){
   drawDots();renderRec();pick(L.latLng(25.0423,121.544));
 }
 function renderRec(){
-  PICKS.forEach((p,i)=>L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:`<div class="pin">★ ${p.score}</div>`,iconSize:null,iconAnchor:[22,12]})}).on('click',()=>go(L.latLng(p.lat,p.lng))).addTo(map));
+  const ps=PICKS.list;
+  ps.forEach(p=>L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:`<div class="pin">★ ${p.score}</div>`,iconSize:null,iconAnchor:[22,12]})}).on('click',()=>go(L.latLng(p.lat,p.lng))).addTo(map));
   document.getElementById('rec').innerHTML=`<div style="font-weight:900;font-size:17px">台北推薦地點</div>
-   <div class="sub" style="margin:4px 0 6px">全台北掃描 6,752 個點（500m 圈），已納入捷運實際進出人次。最高 89 分，以下是分數最高的 10 區，點一下就跳過去。</div>
-   ${PICKS.map((p,i)=>`<div class="rec" onclick="go(L.latLng(${p.lat},${p.lng}))"><div class="s" style="color:${p.score>=85?'#1f8a4c':'#5d8a14'}">${p.score}</div><div><div class="nm">${p.name}附近 <span class="sub">${p.town}${p.vill}</span></div><div class="sub">${p.why}</div></div></div>`).join('')}
-   <div class="sub" style="margin-top:8px">每 200 公尺取一個點計算，相鄰 800 公尺內只留分數最高的一點。分數是相對比較，實際仍要看租金、店面與人潮。</div>`;
+   <div class="sub" style="margin:4px 0 6px">全台北掃描 ${fmt(PICKS.n)} 個點（500m 圈）。最高 ${ps[0].score} 分，以下是分數最高的 ${ps.length} 區，點一下就跳過去。</div>
+   ${ps.map(p=>`<div class="rec" onclick="go(L.latLng(${p.lat},${p.lng}))"><div class="s" style="color:${p.score>=85?'#1f8a4c':'#5d8a14'}">${p.score}</div><div><div class="nm">${p.name}附近 <span class="sub">${p.town}${p.vill}</span></div><div class="sub">${p.why}</div></div></div>`).join('')}
+   <div class="sub" style="margin-top:8px">每 200 公尺取一個點計算，相鄰 800 公尺內只留分數最高的一點。分數還沒算進租金，實際仍要看每坪租金與店面條件。</div>`;
 }
 function drawDots(){
   dots.clearLayers();if(map.getZoom()<12)return;
   const b=map.getBounds().pad(.1);
-  for(const s of D.stores){if(s[0]<5||!b.contains([s[1],s[2]]))continue;
+  for(const s of D.stores){if(s[0]<8||!b.contains([s[1],s[2]]))continue;
     L.circleMarker([s[1],s[2]],{radius:5,color:'#fff',weight:1,fillColor:COL[s[0]],fillOpacity:.95,interactive:false}).addTo(dots)}
 }
 
 function pick(ll){
-  const c=turf.circle([ll.lng,ll.lat],S.r/1000,{steps:96,units:'kilometers'}),cb=turf.bbox(c),parts=[];
-  for(let i=0;i<feats.length;i++){const b=bbox[i];if(b[2]<cb[0]||b[0]>cb[2]||b[3]<cb[1]||b[1]>cb[3])continue;
-    let x=null;try{x=turf.intersect(turf.featureCollection([c,feats[i]]))}catch(e){}
-    if(!x)continue;const a=turf.area(x);if(a<1)continue;parts.push({i,frac:Math.min(1,a/turf.area(feats[i])),a})}
-  if(!parts.length)return;
-  parts.sort((x,y)=>y.a-x.a);
-  let f=0,nail=0,w=0,sp=0,vs=0;
-  for(const {i,frac,a} of parts){const p=P(i);f+=p[8]*frac;nail+=p[14]*frac;w+=a;sp+=(p[11]+p[13])/2*a;vs+=(p[10]+p[12])/2*a}
-  const st={5:0,6:0,7:0,8:0,9:0};
-  for(const s of D.stores) if(s[0]>=5&&ll.distanceTo([s[1],s[2]])<=S.r) st[s[0]]++;
-  const area=turf.area(c),spend=sp/w,visit=vs/w,drug=st[5]+st[6]+st[7];
-  const lg=(v,lo,hi)=>Math.max(0,Math.min(100,(Math.log10(Math.max(v,1e-9))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100));
-  // 捷運人流：1 公里內各站每日進出人次（11–21 點），300 公尺內全算、到 1 公里遞減到 0
-  let mflow=0,nearMrt=1e9,top=null;
-  for(const [n,[la,ln,day]] of MRT){const d=ll.distanceTo([la,ln]);nearMrt=Math.min(nearMrt,d);const wt=Math.max(0,Math.min(1,(1000-d)/700));if(wt>0){mflow+=day*wt;if(!top||day*wt>top[1])top=[n,day*wt,day]}}
-  const hasMrt=nearMrt<3000;
-  const crowd=hasMrt?0.6*lg(mflow,5000,150000)+0.4*visit:visit;
-  const cust=lg(f/(area/1e6),300,8000);
-  const anchor=Math.min(100,(drug*15+st[8]*20)*Math.pow(500/S.r,2));
-  const comp=lg(nail>=.5?(f+mflow*0.05)/nail:5000,100,1500);
-  const score=Math.round(crowd*.35+cust*.2+spend*.2+anchor*.15+comp*.1);
-  S.sel={ll,parts,f,nail,spend,visit,st,drug,score,mflow,hasMrt,top,crowd,anc:P(parts[0].i)};
+  const s=calc(ll.lat,ll.lng,S.r);if(!s)return;
+  s.ll=ll;S.sel=s;
   if(circle)circle.remove();if(center)center.remove();
   circle=L.circle(ll,{radius:S.r,color:'#141414',weight:2.5,fillOpacity:.05,interactive:false}).addTo(map);
   center=L.circleMarker(ll,{radius:7,color:'#141414',weight:3,fillColor:'#d7f24a',fillOpacity:1,interactive:false}).addTo(map);
@@ -149,20 +166,19 @@ function render(){
   document.getElementById('res').innerHTML=`
    <div class="score"><div class="n" style="color:${v[1]}">${s.score}</div><div><div class="v" style="color:${v[1]}">${v[0]}</div><div class="sub">${a[1]}${a[2]}・走路 ${Math.round(S.r/72)} 分鐘內</div></div></div>
    <div class="lines">
-    <div><b>人潮</b><span>${s.hasMrt?`附近捷運每天約 ${(s.mflow/1e4).toFixed(1)} 萬人次${s.top?`（${s.top[0]}站）`:''}・`:''}來客熱度 ${Math.round(s.visit)} 分</span></div>
-    <div><b>客群</b><span>女性 20–44 歲 ${fmt(s.f)} 人</span></div>
-    <div><b>消費</b><span>消費額熱度 ${Math.round(s.spend)} 分</span></div>
-    <div><b>錨點</b><span>藥妝 ${s.drug}・百貨商場 ${s.st[8]}</span></div>
-    <div><b>同業</b><span>美甲店 ${fmt(s.nail)} 家</span></div>
+    <div><b>人流</b><span>${s.hasMrt?`附近捷運每天約 ${(s.mflow/1e4).toFixed(1)} 萬人次${s.top?`（${s.top[0].replace(/^[A-Z]/,'')}站）`:''}・`:''}來客熱度 ${Math.round(s.visit)} 分・百貨商場 ${s.mall} 家</span><em>${Math.round(s.flow)}</em></div>
+    <div><b>客群</b><span>女性 20–44 歲 ${fmt(s.f)} 人・消費熱度 ${Math.round(s.spend)} 分${s.dp?`・${a[1]}白天平日 ${(s.dp[0]/1e4).toFixed(1)} 萬／假日 ${(s.dp[1]/1e4).toFixed(1)} 萬人`:''}</span><em>${Math.round(s.cust)}</em></div>
+    <div><b>美業</b><span>美甲 ${fmt(s.nail)} 家・美容美髮 ${fmt(s.other)} 家（越多代表保養習慣越強）</span><em>${Math.round(s.heat)}</em></div>
    </div>
+   <div class="sub">指數＝人流 40%＋客群 30%＋美業熱度 30%，右側是各項得分。白天人口是整個行政區的數字（2020 年電信信令）。</div>
    <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
    <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td>${x[0]}</td><td class="sub">${x[1]}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
 }
-function addCmp(){const s=S.sel;S.cmp.push({name:s.anc[1]+s.anc[2],score:s.score,crowd:s.crowd,f:s.f,nail:s.nail});if(S.cmp.length>6)S.cmp.shift();renderCmp()}
+function addCmp(){const s=S.sel;S.cmp.push({name:s.anc[1]+s.anc[2],score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>6)S.cmp.shift();renderCmp()}
 function renderCmp(){
   const c=document.getElementById('cmp');c.style.display=S.cmp.length?'':'none';
-  c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>人潮</th><th>女性</th><th>美甲店</th><th></th></tr>
-   ${S.cmp.map((x,j)=>`<tr><td>${x.name}</td><td><b>${x.score}</b></td><td>${Math.round(x.crowd)}</td><td>${fmt(x.f)}</td><td>${fmt(x.nail)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);renderCmp()">✕</button></td></tr>`).join('')}</table>`;
+  c.innerHTML=`<table><tr><th>位置</th><th>指數</th><th>人流</th><th>客群</th><th>美業</th><th></th></tr>
+   ${S.cmp.map((x,j)=>`<tr><td>${x.name}</td><td><b>${x.score}</b></td><td>${Math.round(x.flow)}</td><td>${Math.round(x.cust)}</td><td>${Math.round(x.heat)}</td><td><button class="x" onclick="S.cmp.splice(${j},1);renderCmp()">✕</button></td></tr>`).join('')}</table>`;
 }
 document.getElementById('range').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.r=+b.dataset.r;
   document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));if(S.sel)pick(S.sel.ll)};
