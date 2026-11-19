@@ -43,6 +43,7 @@ details summary{cursor:pointer;font-weight:700;margin-top:12px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
+td.ad{white-space:normal}
 .x{border:0;background:none;color:var(--mute);cursor:pointer}
 .side{display:flex;flex-direction:column;gap:10px}
 #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(246,245,240,.85);z-index:2000;border-radius:12px;font-weight:700}
@@ -159,7 +160,7 @@ function verdict(s){
 }
 function render(){
   const s=S.sel,v=verdict(s.score),a=s.anc;
-  const shops=[];for(const p of s.parts.filter(p=>p.frac>=.15))for(const x of (BIZ[p.i]||[]))if(x[0]===0)shops.push([x[1],P(p.i)[2],x[2]]);
+  const shops=[];for(const p of s.parts.filter(p=>p.frac>=.15))for(const x of (BIZ[p.i]||[]))if(x[0]===0)shops.push([x[1],x[3]||'',x[2],P(p.i)[0]+P(p.i)[1]]);
   shops.sort((x,y)=>y[2]-x[2]);
   const ym=d=>d?`${Math.floor(d/10000)}/${String(Math.floor(d/100)%100).padStart(2,'0')}`:'';
   const g=`${s.ll.lat.toFixed(6)},${s.ll.lng.toFixed(6)}`;
@@ -172,7 +173,7 @@ function render(){
    </div>
    <div class="sub">指數＝人流 40%＋客群 30%＋美業熱度 30%，右側是各項得分。白天人口是整個行政區的數字（2020 年電信信令）。</div>
    <div class="btns"><button class="btn dark" onclick="addCmp()">加入比較</button><a class="btn" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${g}">街景</a></div>
-   <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td>${x[0]}</td><td class="sub">${x[1]}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
+   <details><summary>美甲店名單（${shops.length}）</summary><table>${shops.slice(0,100).map(x=>`<tr><td class="ad">${x[0]}${x[1]?`<div><a class="sub" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x[3]+x[1])}">${x[1]}</a></div>`:''}</td><td class="sub">${ym(x[2])}</td></tr>`).join('')}</table></details>`;
 }
 function addCmp(){const s=S.sel;S.cmp.push({name:s.anc[1]+s.anc[2],score:s.score,flow:s.flow,cust:s.cust,heat:s.heat});if(S.cmp.length>6)S.cmp.shift();renderCmp()}
 function renderCmp(){
