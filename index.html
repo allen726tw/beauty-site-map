@@ -45,6 +45,11 @@ th:first-child,td:first-child{text-align:left}
 .side{display:flex;flex-direction:column;gap:10px}
 #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(246,245,240,.85);z-index:2000;border-radius:12px;font-weight:700}
 .leaflet-container{font-family:inherit}
+.rec{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer}
+.rec:hover{background:#faf9f5}
+.rec .s{font-size:20px;font-weight:900;width:38px;text-align:center}
+.rec .nm{font-weight:700}
+.pin{background:#141414;color:#d7f24a;font-weight:900;font-size:12px;border-radius:12px;padding:2px 7px;border:2px solid #fff;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 </style>
 </head>
 <body>
@@ -62,6 +67,7 @@ th:first-child,td:first-child{text-align:left}
   <div class="side">
     <div class="card" id="res"><div class="sub">點地圖任一處開始</div></div>
     <div class="card" id="cmp" style="display:none"></div>
+    <div class="card" id="rec"></div>
   </div>
 </div>
 
@@ -71,13 +77,13 @@ th:first-child,td:first-child{text-align:left}
 <script>
 const COL={5:'#00a3ad',6:'#e5007f',7:'#8e44ad',8:'#2b59c3',9:'#141414'};
 const S={r:500,sel:null,cmp:[]};
-let D,BIZ,feats,bbox=[],map,dots,circle,center;
+let PICKS=[],D,BIZ,feats,bbox=[],map,dots,circle,center;
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
 const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew]
 
 async function init(){
-  const [topo,data,biz]=await Promise.all(['villages.topo.json','data.json','biz.json'].map(u=>fetch(u).then(r=>r.json())));
-  D=data;BIZ=biz;
+  const [topo,data,biz,picks]=await Promise.all(['villages.topo.json','data.json','biz.json','picks.json'].map(u=>fetch(u).then(r=>r.json())));
+  D=data;BIZ=biz;PICKS=picks;
   feats=topojson.feature(topo,topo.objects.villages).features;
   feats.forEach((f,i)=>bbox[i]=turf.bbox(f));
   map=L.map('map').setView([25.0423,121.544],15);
@@ -87,7 +93,14 @@ async function init(){
   map.on('moveend',drawDots);
   map.on('click',e=>pick(e.latlng));
   document.getElementById('loading').remove();
-  drawDots();pick(L.latLng(25.0423,121.544));
+  drawDots();renderRec();pick(L.latLng(25.0423,121.544));
+}
+function renderRec(){
+  PICKS.forEach((p,i)=>L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:`<div class="pin">★ ${p.score}</div>`,iconSize:null,iconAnchor:[22,12]})}).on('click',()=>go(L.latLng(p.lat,p.lng))).addTo(map));
+  document.getElementById('rec').innerHTML=`<div style="font-weight:900;font-size:17px">台北推薦地點</div>
+   <div class="sub" style="margin:4px 0 6px">全台北掃描 6,752 個點（500m 圈），只有 1 區達 90 分，以下列出 80 分以上的 10 區。點一下就跳過去。</div>
+   ${PICKS.map((p,i)=>`<div class="rec" onclick="go(L.latLng(${p.lat},${p.lng}))"><div class="s" style="color:${p.score>=90?'#1f8a4c':'#5d8a14'}">${p.score}</div><div><div class="nm">${p.name}附近 <span class="sub">${p.town}${p.vill}</span></div><div class="sub">${p.why}</div></div></div>`).join('')}
+   <div class="sub" style="margin-top:8px">每 200 公尺取一個點計算，相鄰 800 公尺內只留分數最高的一點。分數是相對比較，實際仍要看租金、店面與人潮。</div>`;
 }
 function drawDots(){
   dots.clearLayers();if(map.getZoom()<12)return;
