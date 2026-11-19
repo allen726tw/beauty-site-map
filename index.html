@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美業選址小幫手</title>
+<link rel="stylesheet" href="leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f5f0;--card:#fff;--ink:#1d1d1b;--mute:#77756f;--line:#e7e4dc;--lime:#d7f24a;--chip:#f1efe8;--down:#d6362b;--up:#1f8a4c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC",system-ui,sans-serif;font-size:14px}
+header{background:#141414;color:#fff;padding:14px 20px}
+header h1{margin:0;font-size:20px;font-weight:900;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+header h1 .tw{color:var(--lime)}
+header h1 small{font-size:12px;font-weight:400;color:#bbb}
+.wrap{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,1fr);gap:16px;padding:16px;max-width:1400px;margin:0 auto}
+@media(max-width:900px){.wrap{grid-template-columns:1fr;padding:10px;gap:10px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.lbl{color:var(--mute);font-size:13px}
+.seg{display:inline-flex;background:var(--chip);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:8px;font:inherit;cursor:pointer;color:var(--ink)}
+.seg button.on{background:#141414;color:#fff}
+.pill{border:1px solid var(--line);background:#fff;border-radius:9px;padding:5px 10px;font:inherit;cursor:pointer}
+.pill.on{background:var(--lime);border-color:#b8d22a;font-weight:700}
+.pill small{color:var(--mute);font-weight:400}
+select{font:inherit;border:1px solid var(--line);border-radius:9px;padding:5px 8px;background:#fff}
+.search{position:relative;flex:1;min-width:220px}
+.search input{width:100%;font:inherit;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.sres{position:absolute;z-index:1000;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:10px;margin-top:4px;box-shadow:0 6px 20px rgba(0,0,0,.08);display:none;max-height:280px;overflow:auto}
+.sres div{padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line)}
+.sres div:hover{background:var(--chip)}
+.brand{border:1px solid var(--line);background:#fff;border-radius:20px;padding:4px 10px;font:inherit;cursor:pointer;display:inline-flex;gap:6px;align-items:center;font-size:13px}
+.brand i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.brand.off{opacity:.35}
+.brand.all.on{background:#141414;color:#fff}
+#map{height:620px;border-radius:12px;background:#eef0ea}
+@media(max-width:900px){#map{height:420px}}
+.legend{background:#fff;padding:8px 10px;border-radius:8px;border:1px solid var(--line);font-size:12px;min-width:150px}
+.legend .bar{height:8px;border-radius:4px;margin:4px 0}
+.legend .ends{display:flex;justify-content:space-between;color:var(--mute)}
+.side{display:flex;flex-direction:column;gap:12px}
+h2{margin:0 0 4px;font-size:20px;font-weight:900;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{background:var(--lime);font-size:12px;padding:2px 8px;border-radius:6px;font-weight:700}
+.sub{color:var(--mute);font-size:13px}
+.btns{display:flex;gap:8px;margin-top:10px}
+.btn{border:0;border-radius:9px;padding:8px 14px;font:inherit;font-weight:700;cursor:pointer;background:var(--chip)}
+.btn.dark{background:#141414;color:#fff}
+h3{margin:0 0 10px;font-size:15px;font-weight:900}
+h3 small{font-weight:400;color:var(--mute);font-size:12px;margin-left:6px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:420px){.grid{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--chip);border-radius:10px;padding:10px}
+.stat .k{font-size:12px;color:var(--mute)}
+.stat .v{font-size:20px;font-weight:900;margin:2px 0}
+.stat .n{font-size:11px;color:var(--mute)}
+.dn{color:var(--down)}.up{color:var(--up)}
+.note{font-size:12px;color:var(--mute);line-height:1.6;margin-top:8px}
+.heat{margin:10px 0 14px}
+.heat .top{display:flex;align-items:center;gap:10px}
+.heat .name{width:52px;font-weight:700}
+.heat .track{flex:1;height:12px;border-radius:6px;background:linear-gradient(90deg,#e9f5c4,#c9e65a 45%,#f2c230 75%,#f39c1c);position:relative}
+.heat .mark{position:absolute;top:-4px;width:3px;height:20px;background:#141414;border-radius:2px}
+.heat .avg{position:absolute;top:0;width:2px;height:12px;background:rgba(0,0,0,.35)}
+.heat .sc{font-size:22px;font-weight:900;width:56px;text-align:right}
+.heat .sc small{font-size:12px;font-weight:400}
+.heat .meta{margin:4px 0 0 62px;font-size:12px;color:var(--mute)}
+.badge{background:#f39c1c;color:#141414;font-weight:700;border-radius:5px;padding:1px 6px;margin-right:6px}
+.bl{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}@media(max-width:520px){.bl{grid-template-columns:repeat(3,1fr)}}
+.bl .stat .v{font-size:18px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+.tw-scroll{overflow-x:auto}
+.empty{color:var(--mute);text-align:center;padding:30px 10px}
+.x{cursor:pointer;color:var(--mute);border:0;background:none;font-size:14px}
+.townlbl{font-size:11px;color:#555;font-weight:700;text-shadow:0 0 3px #fff,0 0 3px #fff;white-space:nowrap;pointer-events:none}
+.leaflet-container{font-family:inherit}
+.leaflet-control-layers-toggle{background-image:none!important;width:auto!important;height:auto!important;padding:6px 10px;font-weight:700;color:#141414;text-decoration:none}
+.leaflet-control-layers-toggle::after{content:'🗺️ 底圖'}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(246,245,240,.85);z-index:2000;border-radius:12px;font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>美業選址小幫手 <span class="tw">｜全台灣</span> <small>美甲・美睫・美容開店前，點一個位置看：客群夠不夠、錢花不花、人流錨點、同業多不多</small></h1>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="mode"><button data-m="walk" class="on">🚶 步行圈</button><button data-m="admin">🗺️ 看行政區</button></div>
+      <span class="lbl">縣市</span><select id="county"></select>
+      <span class="lbl">村里底色</span>
+      <select id="layer">
+        <option value="fdens">💁‍♀️ 女性 20–44 歲密度</option>
+        <option value="nail">💅 美甲美睫店密度</option>
+        <option value="wpn">⚖️ 每家美甲店對應女性數</option>
+        <option value="food">🍜 餐飲消費熱度</option>
+        <option value="retail">🛍️ 零售消費熱度</option>
+        <option value="density">👥 人口密度</option>
+        <option value="f2044">👩 女性 20–44 歲占比</option>
+        <option value="none">不上色（只看街道）</option>
+      </select>
+      <span class="lbl">透明度</span><input type="range" id="op" min="0" max="90" value="35" style="width:90px">
+    </div>
+    <div class="row" id="rangeRow">
+      <span class="lbl">範圍</span>
+      <button class="pill" data-r="300">300m <small>4分</small></button>
+      <button class="pill on" data-r="500">500m <small>7分</small></button>
+      <button class="pill" data-r="800">800m <small>10分</small></button>
+      <button class="pill" data-r="1200">1.2km <small>15分</small></button>
+    </div>
+    <div class="row">
+      <div class="search"><input id="q" placeholder="🔍 找位置：輸入里名、鄉鎮區名，例如「興雅里」「板橋區」" autocomplete="off"><div class="sres" id="sres"></div></div>
+    </div>
+    <div class="row" id="brands"></div>
+    <div style="position:relative"><div id="map"></div><div id="loading">載入全台村里資料中…</div></div>
+    <div class="note">點地圖任一處畫出步行圈（看行政區模式則點村里）。底圖：內政部國土測繪中心／OpenStreetMap；村里界：內政部；人口：戶籍 115/10；消費熱度：財政部電子發票；美業同業：財政部稅籍登記（115/11/19）；錨點店點：OpenStreetMap（可能少於實際）。</div>
+  </div>
+
+  <div class="side">
+    <div class="card" id="head"><div class="empty">在地圖上點一個位置開始</div></div>
+    <div class="card" id="idxCard" style="display:none"></div>
+    <div class="card" id="compCard" style="display:none"></div>
+    <div class="card" id="popCard" style="display:none"></div>
+    <div class="card" id="heatCard" style="display:none"></div>
+    <div class="card" id="brandCard" style="display:none"></div>
+    <div class="card" id="cmpCard" style="display:none"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
+<script>
+const BCOL=['#e4572e','#1a9e5a','#d9a400','#00704a','#ffbc0d','#00a3ad','#e5007f','#8e44ad','#2b59c3','#141414'];
+const S={op:.35,mode:'walk',r:500,layer:'fdens',county:'臺北市',brandOn:[0,0,0,1,0,1,1,1,1,1],sel:null,cmp:[]};
+let BIZ,D,feats,map,vLayer,storeLayer,circle,centerMk,townLabels=[],bbox=[];
+const fmt=n=>n==null?'—':Math.round(n).toLocaleString('zh-TW');
+const P=i=>D.props[i]; // [county,town,vill,area,pop,hh,pop1y,pop5y,f2044,a65,fn,fs,rn,rs,nail,beauty,hair,nailNew1y]
+
+function color(v,kind){
+  if(v==null) return '#eee';
+  if(kind==='density'){const s=[[0,'#f3f6e9'],[1000,'#dceeb0'],[5000,'#b9dd6a'],[15000,'#f2c230'],[30000,'#f39c1c'],[50000,'#e0661b']];return step(s,v)}
+  if(kind==='fdens'){const s=[[0,'#f6eef2'],[300,'#f2d3e1'],[1000,'#e9a9c6'],[2000,'#dc78a8'],[3500,'#c94a8a'],[5000,'#a8336f']];return step(s,v)}
+  if(kind==='nail'){const s=[[0,'#f4f2fb'],[1,'#ddd6f3'],[5,'#bcaee6'],[15,'#9a83d6'],[30,'#7a58c4'],[60,'#5a35a3']];return step(s,v)}
+  if(kind==='wpn'){const s=[[0,'#d6362b'],[200,'#f08a5d'],[400,'#f6d27a'],[700,'#c9e65a'],[1200,'#7cc56b'],[2500,'#2f9e5a']];return step(s,v)}
+  if(kind==='f2044'){const s=[[0,'#f6eef2'],[12,'#f2d3e1'],[14,'#e9a9c6'],[16,'#dc78a8'],[18,'#c94a8a'],[21,'#a8336f']];return step(s,v)}
+  const s=[[0,'#e9f5c4'],[30,'#d7ee8a'],[50,'#c9e65a'],[70,'#eed247'],[85,'#f2b42a'],[95,'#f39c1c']];return step(s,v);
+}
+function step(s,v){let c=s[0][1];for(const [t,col] of s) if(v>=t) c=col;return c}
+function vval(i,kind){const p=P(i);
+  if(kind==='food') return (p[10]+p[11])/2;
+  if(kind==='retail') return (p[12]+p[13])/2;
+  if(kind==='density') return p[3]? p[4]/(p[3]/1e6):null;
+  if(kind==='f2044') return p[4]? p[8]/p[4]*100:null;
+  if(kind==='fdens') return p[3]? p[8]/(p[3]/1e6):null;
+  if(kind==='nail') return p[3]? p[14]/(p[3]/1e6):null;
+  if(kind==='wpn') return p[14]>=0.5? p[8]/p[14]:(p[8]>0?5000:null);
+}
+function legendHTML(){
+  const L={food:['餐飲消費熱度（全國排名）','0 冷','100 熱','linear-gradient(90deg,#e9f5c4,#c9e65a,#eed247,#f39c1c)'],
+    retail:['零售消費熱度（全國排名）','0 冷','100 熱','linear-gradient(90deg,#e9f5c4,#c9e65a,#eed247,#f39c1c)'],
+    density:['人口密度（人/km²）','0','50,000+','linear-gradient(90deg,#f3f6e9,#b9dd6a,#f2c230,#e0661b)'],
+    f2044:['女性 20–44 歲占比','<12%','21%+','linear-gradient(90deg,#f6eef2,#e9a9c6,#c94a8a)'],
+    fdens:['女性 20–44 歲密度（人/km²）','0','5,000+','linear-gradient(90deg,#f6eef2,#e9a9c6,#c94a8a,#a8336f)'],
+    nail:['美甲美睫店密度（家/km²）','0','60+','linear-gradient(90deg,#f4f2fb,#bcaee6,#7a58c4,#5a35a3)'],
+    wpn:['每家美甲店對應女性 20–44 歲','紅＝擠','綠＝空間大','linear-gradient(90deg,#d6362b,#f6d27a,#c9e65a,#2f9e5a)']}[S.layer];
+  if(!L) return '';
+  return `<div class="legend"><b>${L[0]}</b><div class="bar" style="background:${L[3]}"></div><div class="ends"><span>${L[1]}</span><span>${L[2]}</span></div></div>`;
+}
+
+async function init(){
+  const [topo,data,biz]=await Promise.all([fetch('villages.topo.json').then(r=>r.json()),fetch('data.json').then(r=>r.json()),fetch('biz.json').then(r=>r.json())]);BIZ=biz;
+  D=data;
+  feats=topojson.feature(topo,topo.objects.villages).features;
+  feats.forEach((f,i)=>{f.properties={i};bbox[i]=turf.bbox(f)});
+  const towns=topojson.mesh(topo,topo.objects.towns,(a,b)=>a!==b);
+  const townF=topojson.feature(topo,topo.objects.towns).features;
+
+  map=L.map('map',{preferCanvas:true,zoomControl:true,attributionControl:true}).setView([25.0423,121.5440],14);
+  map.attributionControl.setPrefix('').addAttribution('村里界 © 內政部');
+  const emap=L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:19,attribution:'底圖 © 內政部國土測繪中心'});
+  const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'});
+  const photo=L.tileLayer('https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}',{maxZoom:19,attribution:'航照 © 內政部國土測繪中心'});
+  emap.addTo(map);
+  L.control.layers({'臺灣通用電子地圖':emap,'OpenStreetMap':osm,'航照圖':photo},null,{position:'topright'}).addTo(map);
+  map.createPane('vill');map.getPane('vill').style.zIndex=350;
+  map.on('click',e=>{if(S.mode==='walk')onClick(e.latlng,null)});
+  const rend=L.canvas({padding:.3,pane:'vill'});
+  vLayer=L.geoJSON(feats,{renderer:rend,style:f=>styleV(f.properties.i),
+    onEachFeature:(f,l)=>{l.on('click',e=>{L.DomEvent.stopPropagation(e);onClick(e.latlng,f.properties.i)});
+      l.bindTooltip(()=>{const p=P(f.properties.i);return `${p[1]} ${p[2]}`},{sticky:true,direction:'top',opacity:.9})}}).addTo(map);
+  L.geoJSON(towns,{renderer:rend,style:{color:'#6b6b63',weight:1.2,opacity:.7,fill:false},interactive:false}).addTo(map);
+  townF.forEach(f=>{const p=f.properties;try{const c=turf.pointOnFeature(f).geometry.coordinates;
+    townLabels.push(L.marker([c[1],c[0]],{interactive:false,icon:L.divIcon({className:'townlbl',html:p.TOWNNAME,iconSize:null})}))}catch(e){}});
+
+
+  const legend=L.control({position:'bottomright'});legend.onAdd=()=>{const d=L.DomUtil.create('div');d.id='legend';d.innerHTML=legendHTML();return d};legend.addTo(map);
+
+  storeLayer=L.layerGroup().addTo(map);
+  map.on('moveend',drawStores);
+
+  // county select
+  const cs=Object.keys(D.county);const order=['臺北市','新北市','桃園市','臺中市','臺南市','高雄市','基隆市','新竹市','新竹縣','苗栗縣','彰化縣','南投縣','雲林縣','嘉義市','嘉義縣','屏東縣','宜蘭縣','花蓮縣','臺東縣','澎湖縣','金門縣','連江縣'];
+  document.getElementById('county').innerHTML=order.filter(c=>cs.includes(c)).map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('county').onchange=e=>{S.county=e.target.value;const idx=D.props.map((p,i)=>p[0]===S.county?i:-1).filter(i=>i>=0);
+    const b=turf.bbox(turf.featureCollection(idx.map(i=>feats[i])));map.fitBounds([[b[1],b[0]],[b[3],b[2]]])};
+
+  // brand chips
+  const cnt=D.brands.map(()=>0);D.stores.forEach(s=>cnt[s[0]]++);
+  const bwrap=document.getElementById('brands');
+  const chip=i=>`<button class="brand${S.brandOn[i]?'':' off'}" data-b="${i}"><i style="background:${BCOL[i]}"></i>${D.brands[i]} ${cnt[i].toLocaleString()}</button>`;
+  bwrap.innerHTML=`<button class="brand all" data-b="all">全部</button><span class="lbl">美業錨點</span>${[5,6,7,8,9].map(chip).join('')}<span class="lbl">生活機能</span>${[3,4,0,1,2].map(chip).join('')}`;
+  bwrap.onclick=e=>{const t=e.target.closest('.brand');if(!t)return;const b=t.dataset.b;
+    if(b==='all'){const on=!S.brandOn.every(x=>x);S.brandOn=S.brandOn.map(()=>on?1:0)}else S.brandOn[b]=S.brandOn[b]?0:1;
+    bwrap.querySelectorAll('.brand').forEach(el=>{const bb=el.dataset.b;if(bb==='all')el.classList.toggle('on',S.brandOn.every(x=>x));else el.classList.toggle('off',!S.brandOn[bb])});
+    drawStores();if(S.sel)render()};
+
+  document.getElementById('loading').remove();
+  drawStores();
+  onClick(L.latLng(25.0423,121.5440),null); // 預設：忠孝復興
+}
+function styleV(i){
+  const v=S.layer==='none'?null:vval(i,S.layer);
+  return {color:'#fff',weight:.6,opacity:.7,fillColor:color(v,S.layer),fillOpacity:S.layer==='none'?0:S.op};
+}
+function syncLabels(){const z=map.getZoom();townLabels.forEach(m=>{if(z>=12&&z<=15)m.addTo(map);else m.remove()})}
+function drawStores(){
+  storeLayer.clearLayers();
+  const b=map.getBounds().pad(.1), z=map.getZoom();
+  if(z<11) return;
+  const r=z>=15?5:z>=13?3.5:2.5;
+  for(const s of D.stores){if(!S.brandOn[s[0]])continue;if(!b.contains([s[1],s[2]]))continue;
+    L.circleMarker([s[1],s[2]],{radius:s[0]>=5?r+1.5:r,color:'#fff',weight:z>=14?1:0,fillColor:BCOL[s[0]],fillOpacity:.9,interactive:false}).addTo(storeLayer)}
+}
+
+/* ---------- 計算 ---------- */
+function calcCircle(latlng,r){
+  const c=turf.circle([latlng.lng,latlng.lat],r/1000,{steps:96,units:'kilometers'});
+  const cb=turf.bbox(c), parts=[];
+  for(let i=0;i<feats.length;i++){const b=bbox[i];if(b[2]<cb[0]||b[0]>cb[2]||b[3]<cb[1]||b[1]>cb[3])continue;
+    let inter=null;try{inter=turf.intersect(turf.featureCollection([c,feats[i]]))}catch(e){}
+    if(!inter)continue;const a=turf.area(inter), full=turf.area(feats[i]);if(a<1)continue;
+    parts.push({i,frac:Math.min(1,a/full),a});}
+  const area=turf.area(c);
+  const where=parts.slice().sort((x,y)=>y.a-x.a)[0];
+  return {type:'circle',latlng,r,geom:c,parts,area,anchor:where?where.i:null};
+}
+function calcVillage(i){const f=feats[i];return {type:'village',i,parts:[{i,frac:1,a:turf.area(f)}],area:turf.area(f),anchor:i,geom:f}}
+function agg(sel){
+  let nail=0,bty=0,hair=0,nNew=0,pop=0,hh=0,p1=0,p5=0,f=0,a65=0,ok1=true,ok5=true,w=0,fn=0,fs=0,rn=0,rs=0,hotF=null,hotR=null;
+  for(const {i,frac,a} of sel.parts){const p=P(i);
+    nail+=p[14]*frac;bty+=p[15]*frac;hair+=p[16]*frac;nNew+=p[17]*frac;pop+=p[4]*frac;hh+=p[5]*frac;f+=p[8]*frac;a65+=p[9]*frac;
+    if(p[6]==null)ok1=false;else p1+=p[6]*frac; if(p[7]==null)ok5=false;else p5+=p[7]*frac;
+    w+=a;fn+=p[10]*a;fs+=p[11]*a;rn+=p[12]*a;rs+=p[13]*a;
+    if(!hotF||(p[10]+p[11])>(P(hotF)[10]+P(hotF)[11]))hotF=i; if(!hotR||(p[12]+p[13])>(P(hotR)[12]+P(hotR)[13]))hotR=i;}
+  const st=D.brands.map(()=>0);const near=D.brands.map(()=>null);
+  const c=sel.type==='circle'?sel.latlng:null;
+  for(const s of D.stores){
+    if(c){const d=c.distanceTo([s[1],s[2]]);if(d<=sel.r)st[s[0]]++;if(near[s[0]]==null||d<near[s[0]])near[s[0]]=d}
+    else{if(turf.booleanPointInPolygon([s[2],s[1]],sel.geom))st[s[0]]++}}
+  return {nail,bty,hair,nNew,pop,hh,f,a65,p1:ok1?p1:null,p5:ok5?p5:null,food:{n:fn/w,s:fs/w},retail:{n:rn/w,s:rs/w},hotF,hotR,st,near,cvs:st[0]+st[1]+st[2]};
+}
+
+/* ---------- 美業開店指數 ---------- */
+const lg=(v,lo,hi)=>Math.max(0,Math.min(100,(Math.log10(Math.max(v,1e-9))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100));
+function beautyIndex(sel,a){
+  const km2=sel.area/1e6;
+  const fd=a.f/km2;                                   // 女性20–44 密度
+  const cust=lg(fd,300,8000);
+  const spend=(a.retail.n+a.retail.s)/2;               // 零售消費熱度
+  const anc=a.st[5]*12+a.st[6]*12+a.st[7]*12+a.st[8]*20+a.st[9]*20+a.st[3]*5; // 錨點
+  const scale=sel.type==='circle'?Math.pow(500/sel.r,2):1; // 換算成 500m 圈的量
+  const flow=Math.min(100,anc*scale);
+  const wpn=a.nail>=0.5?a.f/a.nail:a.f>0?3000:0;
+  const comp=a.f<200?20:lg(wpn,120,1500);
+  const total=Math.round(cust*.3+spend*.25+flow*.25+comp*.2);
+  return {total,cust,spend,flow,comp,fd,wpn};
+}
+function verdict(b){
+  if(b.total>=75) return ['很適合','客群、消費力、人流都到位，值得實地踩點。','#1f8a4c'];
+  if(b.total>=60) return ['可以考慮','條件不錯，但有短板，看下面哪一項偏低再判斷。','#7a9a1a'];
+  if(b.total>=45) return ['條件普通','適合有固定客源（預約制、工作室）的經營方式，不建議靠路過客。','#c98a00'];
+  return ['不建議展店','目標客群或消費動能偏弱，除非租金很低或有既有客源。','#d6362b'];
+}
+
+/* ---------- 互動 ---------- */
+function onClick(latlng,i){
+  if(S.mode==='admin'&&i!=null){S.sel=calcVillage(i)}
+  else if(S.mode==='walk'){S.sel=calcCircle(latlng,S.r)}
+  else return;
+  drawSel();render();
+}
+function drawSel(){
+  if(circle)circle.remove();if(centerMk)centerMk.remove();
+  const s=S.sel;if(!s)return;
+  if(s.type==='circle'){circle=L.circle(s.latlng,{radius:s.r,color:'#141414',weight:2.5,fill:true,fillOpacity:.05,interactive:false}).addTo(map);
+    centerMk=L.circleMarker(s.latlng,{radius:7,color:'#141414',weight:3,fillColor:'#d7f24a',fillOpacity:1,interactive:false}).addTo(map);}
+  else{circle=L.geoJSON(s.geom,{style:{color:'#141414',weight:3,fill:false},interactive:false}).addTo(map)}
+}
+const gll=s=>{const c=s.type==='circle'?s.latlng:L.latLng(turf.pointOnFeature(s.geom).geometry.coordinates.slice().reverse());return c.lat.toFixed(6)+','+c.lng.toFixed(6)};
+const walkMin=r=>Math.round(r/72);
+function render(){
+  const s=S.sel;if(!s)return;const a=agg(s);s.a=a;
+  const anc=s.anchor!=null?P(s.anchor):null;const cty=anc?D.county[anc[0]]:null;
+  const km2=s.area/1e6, dens=a.pop/km2;
+  const title=s.type==='circle'?`步行圈 ${s.r>=1000?(s.r/1000)+' 公里':s.r+' 公尺'} <span class="tag">走路約 ${walkMin(s.r)} 分鐘</span>`:`${anc[1]} ${anc[2]} <span class="tag">村里</span>`;
+  document.getElementById('head').innerHTML=`<h2>${title}</h2>
+   <div class="sub">📍 ${s.type==='circle'?'中心在 ':''}<b>${anc?anc[0]+anc[1]+' '+anc[2]:'海上'}</b>　·　${s.type==='circle'?'圈內':'村里'}面積 ${km2.toFixed(2)} km²</div>
+   <div class="btns" style="flex-wrap:wrap"><button class="btn dark" onclick="addCmp()">📌 加入比較</button><a class="btn" style="text-decoration:none;color:inherit" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${gll(s)}">📍 Google 地圖</a><a class="btn" style="text-decoration:none;color:inherit" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${gll(s)}">👀 街景</a>${s.type==='circle'?'<button class="btn" onclick="map.flyTo(S.sel.latlng,15)">回到圈圈</button>':''}</div>`;
+  const ch=(now,old)=>{if(old==null||!old)return '<div class="v">—</div><div class="n">村里界有調整</div>';const d=(now-old)/old*100;const cls=d<0?'dn':'up';
+    return `<div class="v ${cls}">${d<0?'▼':'▲'} ${Math.abs(d).toFixed(2)}%</div><div class="n">${d<0?'':'+'}${fmt(now-old)} 人</div>`};
+  const b=beautyIndex(s,a);s.b=b;const v=verdict(b);
+  const sub=(name,val,desc)=>`<div class="heat" style="margin:8px 0"><div class="top"><span class="name" style="width:78px">${name}</span><div class="track" style="background:#eee"><div style="position:absolute;left:0;top:0;bottom:0;border-radius:6px;width:${val}%;background:${val>=70?'#9bd35a':val>=45?'#f2c230':'#f08a5d'}"></div></div><span class="sc" style="font-size:16px">${Math.round(val)}</span></div><div class="meta" style="margin-left:88px">${desc}</div></div>`;
+  const ic=document.getElementById('idxCard');ic.style.display='';
+  ic.innerHTML=`<h3>💅 美業開店指數<small>0–100，給美甲・美睫・美容店參考</small></h3>
+   <div style="display:flex;align-items:center;gap:14px;margin:4px 0 8px"><div style="font-size:48px;font-weight:900;line-height:1;color:${v[2]}">${b.total}</div>
+   <div><div style="font-weight:900;font-size:17px;color:${v[2]}">${v[0]}</div><div class="sub">${v[1]}</div></div></div>
+   ${sub('客群 30%',b.cust,`女性 20–44 歲 ${fmt(a.f)} 人，密度 ${fmt(b.fd)} 人/km²`)}
+   ${sub('消費力 25%',b.spend,`零售消費熱度 ${Math.round(b.spend)} 分（贏過全國 ${Math.round(b.spend)}% 村里）`)}
+   ${sub('人流錨點 25%',b.flow,`藥妝 ${a.st[5]+a.st[6]+a.st[7]} 家・百貨商場 ${a.st[8]}・車站 ${a.st[9]}・星巴克 ${a.st[3]}`)}
+   ${sub('競爭空間 20%',b.comp,a.nail>=0.5?`每家美甲美睫店對應 ${fmt(b.wpn)} 位女性 20–44 歲${cty&&cty.womenPerNail?`（${anc[0]}平均 ${fmt(cty.womenPerNail)}）`:''}`:'圈內幾乎沒有美甲美睫店')}
+   <div class="note">算法：客群看女性 20–44 歲密度、消費力用財政部零售熱度、人流錨點數屈臣氏／康是美／寶雅／百貨／車站／星巴克（換算成 500m 圈的量）、競爭空間看每家美甲店分到多少目標客群。同業多不一定壞，代表大家認可這裡有生意，要搭配店型判斷。</div>`;
+  const cc=document.getElementById('compCard');cc.style.display='';
+  const shops=[];for(const p of s.parts.filter(p=>p.frac>=.15)){const L_=BIZ[p.i]||[];for(const x of L_)shops.push([...x,P(p.i)[2]])}
+  shops.sort((x,y)=>x[0]-y[0]||y[2]-x[2]);
+  const rocDate=d=>d?`${Math.floor(d/10000)}/${String(Math.floor(d/100)%100).padStart(2,'0')}`:'';
+  cc.innerHTML=`<h3>美業同業<small>財政部稅籍登記・依村里估算</small></h3>
+   <div class="grid">
+    <div class="stat"><div class="k">💅 美甲美睫</div><div class="v">${fmt(a.nail)}</div><div class="n">家（近一年新設 ${fmt(a.nNew)}）</div></div>
+    <div class="stat"><div class="k">✨ 美容美體</div><div class="v">${fmt(a.bty)}</div><div class="n">家</div></div>
+    <div class="stat"><div class="k">💇 美髮</div><div class="v">${fmt(a.hair)}</div><div class="n">家</div></div>
+   </div>
+   <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">看${s.type==='circle'?'圈內主要村里':'這個村里'}的美甲／美容店名單（${shops.length} 家）</summary>
+   <div style="max-height:320px;overflow:auto;margin-top:6px"><table>${shops.slice(0,150).map(x=>`<tr><td>${x[0]===0?'💅':'✨'} ${x[1]}</td><td class="sub">${x[3]}</td><td class="sub">${rocDate(x[2])}</td></tr>`).join('')}</table></div>
+   <div class="note">名單來自稅籍登記地址有寫到的村里（圈圈蓋到 15% 以上的里），不保證每家都還在營業，也不含沒辦登記的工作室。日期是設立年月（民國）。</div></details>`;
+  const pc=document.getElementById('popCard');pc.style.display='';
+  pc.innerHTML=`<h3>${s.type==='circle'?'圈內人口':'村里人口'}<small>${s.type==='circle'?'依面積比例估算・':''}戶籍 ${D.popMonth}</small></h3>
+   <div class="grid">
+    <div class="stat"><div class="k">${s.type==='circle'?'估計人口':'人口'}</div><div class="v">${s.type==='circle'?'約 ':''}${fmt(a.pop)}</div><div class="n">人</div></div>
+    <div class="stat"><div class="k">戶數</div><div class="v">${fmt(a.hh)}</div><div class="n">平均每戶 ${(a.pop/a.hh||0).toFixed(2)} 人</div></div>
+    <div class="stat"><div class="k">人口密度</div><div class="v">${fmt(dens)}</div><div class="n">${cty?anc[0]+'平均 '+fmt(cty.density):''}</div></div>
+    <div class="stat"><div class="k">近 1 年人口</div>${ch(a.pop,a.p1)}</div>
+    <div class="stat"><div class="k">近 5 年人口</div>${ch(a.pop,a.p5)}</div>
+    <div class="stat"><div class="k">每家超商服務</div><div class="v">${a.cvs?fmt(a.pop/a.cvs):'—'}</div><div class="n">人${cty&&cty.perStore?'（'+anc[0]+' '+fmt(cty.perStore)+' 人）':''}</div></div>
+    <div class="stat"><div class="k">女性 20–44 歲</div><div class="v">${fmt(a.f)}</div><div class="n">占 ${(a.f/a.pop*100||0).toFixed(1)}%</div></div>
+    <div class="stat"><div class="k">65 歲以上</div><div class="v">${fmt(a.a65)}</div><div class="n">占 ${(a.a65/a.pop*100||0).toFixed(1)}%</div></div>
+    <div class="stat"><div class="k">涵蓋村里</div><div class="v">${s.parts.length}</div><div class="n">個</div></div>
+   </div>
+   ${s.type==='circle'?`<div class="note">涵蓋：${s.parts.filter(p=>p.frac>=.005).sort((x,y)=>y.a-x.a).map(p=>`${P(p.i)[2]}（${Math.round(p.frac*100)}%）`).join('、')}<br>括號＝圓圈蓋到這個村里的面積比例，人口照這個比例計入。</div>`:''}`;
+  const hc=document.getElementById('heatCard');hc.style.display='';
+  const bar=(name,o,cAvg,hot)=>{const sc=Math.round((o.n+o.s)/2);const top=sc>=90?'<span class="badge">全國前 10%</span>':sc>=75?'<span class="badge" style="background:#f2c230">全國前 25%</span>':'';
+    return `<div class="heat"><div class="top"><span class="name">${name}</span><div class="track"><div class="avg" style="left:${cAvg}%"></div><div class="mark" style="left:calc(${sc}% - 1px)"></div></div><span class="sc">${sc}<small> 分</small></span></div>
+     <div class="meta">${top}來客熱度 <b>${Math.round(o.n)}</b>・消費額熱度 <b>${Math.round(o.s)}</b>（${anc?anc[0]:''}平均 ${cAvg}）${s.type==='circle'&&hot!=null?`<br>圈內最熱：${P(hot)[2]}`:''}</div></div>`};
+  hc.innerHTML=`<h3>消費熱度<small>${D.year} 年・分數＝贏過全國幾 % 的村里</small></h3>
+   ${bar('🍜 餐飲',a.food,cty?cty.food:50,a.hotF)}${bar('🛍️ 零售',a.retail,cty?cty.retail:50,a.hotR)}
+   <div class="note">財政部依店家開出的發票，算出每個村里餐飲、零售的「來客（張數）」與「消費額」在全國的排名。看的是「錢花在哪裡」，不是「住這裡的人多會花」：商圈、夜市、車站分數高，純住宅區分數低。${s.type==='circle'?'圈內分數是蓋到的各里依面積加權平均。':''}</div>`;
+  const bc=document.getElementById('brandCard');bc.style.display='';
+  bc.innerHTML=`<h3>${s.type==='circle'?'圈內錨點與品牌':'村里內錨點與品牌'}<small>OpenStreetMap 店點</small></h3>
+   <div class="bl">${[5,6,7,8,9,3,4,0,1,2].map(i=>[D.brands[i],i]).map(([b,i])=>`<div class="stat"><div class="k"><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${BCOL[i]}"></i> ${b}</div><div class="v">${a.st[i]}</div><div class="n">${s.type==='circle'&&a.near[i]!=null?'最近 '+(a.near[i]<1000?Math.round(a.near[i])+'m':(a.near[i]/1000).toFixed(1)+'km'):''}</div></div>`).join('')}</div>`;
+}
+function addCmp(){
+  const s=S.sel;if(!s||!s.a)return;const a=s.a,anc=s.anchor!=null?P(s.anchor):['','','—'];
+  S.cmp.push({idx:s.b.total,nail:a.nail,wpn:a.nail>=0.5?a.f/a.nail:null,drug:a.st[5]+a.st[6]+a.st[7],name:s.type==='circle'?`${anc[1]}${anc[2]}・${s.r}m`:`${anc[1]}${anc[2]}`,pop:a.pop,dens:a.pop/(s.area/1e6),f:a.f/a.pop*100,
+    p5:a.p5?(a.pop-a.p5)/a.p5*100:null,food:(a.food.n+a.food.s)/2,retail:(a.retail.n+a.retail.s)/2,cvs:a.cvs,sb:a.st[3],mc:a.st[4]});
+  if(S.cmp.length>6)S.cmp.shift();renderCmp();
+}
+function renderCmp(){
+  const c=document.getElementById('cmpCard');c.style.display=S.cmp.length?'':'none';
+  const best=(k,hi=true)=>{const v=S.cmp.map(x=>x[k]).filter(x=>x!=null);return hi?Math.max(...v):Math.min(...v)};
+  const cell=(x,k,f)=>`<td style="${S.cmp.length>1&&x[k]===best(k)?'font-weight:900;background:#f4fbd6':''}">${x[k]==null?'—':f(x[k])}</td>`;
+  c.innerHTML=`<h3>位置比較<small>最多 6 個，粗體＝最高（美甲店數越多代表越競爭）</small></h3><div class="tw-scroll"><table>
+   <tr><th>位置</th><th>指數</th><th>美甲店</th><th>女/店</th><th>藥妝</th><th>人口</th><th>密度</th><th>女20–44</th><th>5年</th><th>餐飲</th><th>零售</th><th>超商</th><th>星巴克</th><th></th></tr>
+   ${S.cmp.map((x,j)=>`<tr><td>${x.name}</td>${cell(x,'idx',v=>v)}${cell(x,'nail',fmt)}${cell(x,'wpn',fmt)}${cell(x,'drug',v=>v)}${cell(x,'pop',fmt)}${cell(x,'dens',fmt)}${cell(x,'f',v=>v.toFixed(1)+'%')}${cell(x,'p5',v=>(v>0?'+':'')+v.toFixed(1)+'%')}${cell(x,'food',Math.round)}${cell(x,'retail',Math.round)}${cell(x,'cvs',v=>v)}${cell(x,'sb',v=>v)}<td><button class="x" onclick="S.cmp.splice(${j},1);renderCmp()">✕</button></td></tr>`).join('')}
+  </table></div>`;
+}
+
+/* ---------- 控制項 ---------- */
+document.getElementById('mode').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.mode=b.dataset.m;
+  document.querySelectorAll('#mode button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('rangeRow').style.display=S.mode==='walk'?'':'none';
+  if(S.mode==='admin'&&S.sel&&S.sel.anchor!=null){S.sel=calcVillage(S.sel.anchor);drawSel();render()}
+  else if(S.mode==='walk'&&S.sel){const c=S.sel.type==='circle'?S.sel.latlng:L.latLng(turf.pointOnFeature(feats[S.sel.i]).geometry.coordinates.slice().reverse());S.sel=calcCircle(c,S.r);drawSel();render()}};
+document.getElementById('rangeRow').onclick=e=>{const b=e.target.closest('.pill');if(!b)return;S.r=+b.dataset.r;
+  document.querySelectorAll('#rangeRow .pill').forEach(x=>x.classList.toggle('on',x===b));
+  if(S.sel&&S.sel.type==='circle'){S.sel=calcCircle(S.sel.latlng,S.r);drawSel();render()}};
+document.getElementById('op').oninput=e=>{S.op=e.target.value/100;vLayer.setStyle(f=>styleV(f.properties.i))};
+document.getElementById('layer').onchange=e=>{S.layer=e.target.value;vLayer.setStyle(f=>styleV(f.properties.i));document.getElementById('legend').innerHTML=legendHTML()};
+const q=document.getElementById('q'),sres=document.getElementById('sres');
+q.oninput=()=>{const t=q.value.trim().replace(/台/g,'臺');if(!t){sres.style.display='none';return}
+  const out=[],towns=new Set();
+  D.props.forEach((p,i)=>{if(out.length<40&&(p[2].includes(t)||(p[1]+p[2]).includes(t)||(p[0]+p[1]+p[2]).includes(t)))out.push({i,label:`${p[2]}　<span class="sub">${p[0]}${p[1]}</span>`});
+    const tn=p[0]+p[1];if(p[1].includes(t)&&!towns.has(tn))towns.add(tn)});
+  const tl=[...towns].slice(0,6).map(tn=>({town:tn,label:`📍 ${tn}`}));
+  const all=[...tl,...out].slice(0,20);
+  sres.innerHTML=all.length?all.map((x,k)=>`<div data-k="${k}">${x.label}</div>`).join(''):'<div>找不到，換個關鍵字試試</div>';
+  sres.style.display='block';
+  sres.onclick=e=>{const d=e.target.closest('[data-k]');if(!d)return;const x=all[d.dataset.k];sres.style.display='none';q.value='';
+    if(x.town){const idx=D.props.map((p,i)=>p[0]+p[1]===x.town?i:-1).filter(i=>i>=0);const b=turf.bbox(turf.featureCollection(idx.map(i=>feats[i])));map.fitBounds([[b[1],b[0]],[b[3],b[2]]]);return}
+    const c=turf.pointOnFeature(feats[x.i]).geometry.coordinates;const ll=L.latLng(c[1],c[0]);map.flyTo(ll,15);
+    if(S.mode==='admin')S.sel=calcVillage(x.i);else S.sel=calcCircle(ll,S.r);drawSel();render()}};
+document.addEventListener('click',e=>{if(!e.target.closest('.search'))sres.style.display='none'});
+init().catch(e=>{document.getElementById('loading').textContent='載入失敗：'+e.message});
+</script>
+</body>
+</html>
