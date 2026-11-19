@@ -53,6 +53,7 @@ th:first-child,td:first-child{text-align:left}
   <div class="card">
     <div class="top">
       <div class="search"><input id="q" placeholder="輸入地址或里名，例如「板橋區新民里」" autocomplete="off"><div class="sres" id="sres"></div></div>
+      <div id="hint" class="sub" style="display:none;flex-basis:100%;order:3"></div>
       <div class="seg" id="range"><button data-r="300">300m</button><button data-r="500" class="on">500m</button><button data-r="800">800m</button></div>
     </div>
     <div style="position:relative"><div id="map"></div><div id="loading">載入中…</div></div>
@@ -152,15 +153,45 @@ const q=document.getElementById('q'),sres=document.getElementById('sres');
 function go(ll){map.flyTo(ll,15);pick(ll)}
 q.oninput=()=>{const t=q.value.trim().replace(/台/g,'臺');if(!t){sres.style.display='none';return}
   const out=[];D.props.forEach((p,i)=>{if(out.length<8&&(p[0]+p[1]+p[2]).includes(t)||out.length<8&&(p[1]+p[2]).includes(t))out.push(i)});
-  sres.innerHTML=out.map(i=>`<div data-i="${i}">${P(i)[2]} <span class="sub">${P(i)[0]}${P(i)[1]}</span></div>`).join('')+`<div data-addr="1">🔍 搜尋地址「${q.value.trim()}」</div>`;
+  sres.innerHTML=out.map(i=>`<div data-i="${i}">${P(i)[2]} <span class="sub">${P(i)[0]}${P(i)[1]}</span></div>`).join('')+`<div data-addr="1">🔍 搜尋地址「${q.value.trim()}」（或按 Enter）</div>`;
   sres.style.display='block'};
 sres.onclick=async e=>{const d=e.target.closest('div');if(!d)return;sres.style.display='none';
   if(d.dataset.i){const c=turf.pointOnFeature(feats[+d.dataset.i]).geometry.coordinates;go(L.latLng(c[1],c[0]));q.value='';return}
   findAddr(q.value.trim())};
-q.onkeydown=e=>{if(e.key==='Enter'){sres.style.display='none';findAddr(q.value.trim())}};
-async function findAddr(t){if(!t)return;
-  try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=tw&limit=1&accept-language=zh-TW&q='+encodeURIComponent(t)).then(r=>r.json());
-    if(r[0]){go(L.latLng(+r[0].lat,+r[0].lon));q.value=''}else{q.value='';q.placeholder='找不到這個地址，試試里名或路名'}}catch(e){q.placeholder='地址搜尋暫時無法使用，請改輸入里名'}}
+q.onkeydown=e=>{if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;e.preventDefault();sres.style.display='none';findAddr(q.value.trim())};
+const CN={'零':0,'〇':0,'一':1,'二':2,'兩':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+function cnNum(t){let n=0,cur=0;for(const ch of t){if(ch in CN)cur=CN[ch];else if(ch==='十'){n+=(cur||1)*10;cur=0}else if(ch==='百'){n+=(cur||1)*100;cur=0}else if(ch==='千'){n+=(cur||1)*1000;cur=0}}return n+cur}
+function normAddr(t){
+  t=t.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/\s+/g,'').replace(/台/g,'臺');
+  return t.replace(/([零〇一二兩三四五六七八九十百千]+)(?=[巷弄號樓之])/g,m=>cnNum(m));
+}
+function candidates(t){
+  const out=[t];
+  const cuts=[/(\d+樓.*|之\d+.*)$/,/\d+號.*$/,/\d+弄.*$/,/\d+巷.*$/];
+  let cur=t;for(const r of cuts){const n=cur.replace(r,'');if(n&&n!==cur){out.push(n);cur=n}}
+  return [...new Set(out)];
+}
+const TYPE={PointAddress:'門牌',StreetAddress:'門牌附近',StreetName:'路段／巷弄',Locality:'區域',POI:'地標',Neighborhood:'區域'};
+async function arcgis(t){
+  const u='https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&countryCode=TWN&maxLocations=1&outFields=Addr_type,Match_addr&SingleLine='+encodeURIComponent(t);
+  const r=await fetch(u).then(r=>r.json());const c=r.candidates&&r.candidates[0];
+  return c&&c.score>=80?{lat:c.location.y,lng:c.location.x,label:c.attributes.Match_addr||c.address,type:c.attributes.Addr_type}:null;
+}
+async function nominatim(t){
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=tw&limit=1&accept-language=zh-TW&q='+encodeURIComponent(t)).then(r=>r.json());
+  return r[0]?{lat:+r[0].lat,lng:+r[0].lon,label:t,type:'Locality'}:null;
+}
+async function findAddr(raw){if(!raw)return;
+  const t=normAddr(raw);const hint=document.getElementById('hint');
+  hint.textContent='搜尋中…';hint.style.display='block';
+  for(const c of candidates(t)){let hit=null;
+    try{hit=await arcgis(c)}catch(e){}
+    if(!hit){try{hit=await nominatim(c)}catch(e){}}
+    if(hit){const exact=c===t&&hit.type==='PointAddress';
+      hint.innerHTML=`📍 ${hit.label.replace(/,\s*\d+$/,'')}　<span class="sub">${exact?'精確門牌':'約略位置（'+(TYPE[hit.type]||'附近')+'）'}</span>`;
+      q.value='';go(L.latLng(hit.lat,hit.lng));return}}
+  hint.innerHTML='找不到這個地址，試試加上區名，例如「大安區延吉街」';
+}
 document.addEventListener('click',e=>{if(!e.target.closest('.search'))sres.style.display='none'});
 init();
 </script>
